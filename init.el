@@ -7,3 +7,5 @@
 ;; and unsolicited evangelism about Emacs.
 
 ;; Let there be `(setq)!`
+
+;; this is a very deep contribution, let's see if it makes it upstream
