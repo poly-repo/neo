@@ -7,3 +7,5 @@
 ;; and unsolicited evangelism about Emacs.
 
 ;; Let there be `(setq)!`
+
+;; this should be 4
