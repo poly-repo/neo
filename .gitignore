@@ -1,0 +1,11 @@
+# Compiled
+*.elc
+
+# Backup files
+*~
+
+# Undo-tree save-files
+*.~undo-tree
+
+# Here we put what everybody generates
+.litter/

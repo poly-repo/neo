@@ -1,0 +1,10 @@
+---
+
+- name: Setup a decent Emacs environment
+  hosts: localhost
+  vars:
+    home_dir: "{{ lookup('env', 'HOME') }}"
+    linux_user: "{{ lookup('env', 'USER') }}"
+  roles:
+    - {role: ../../roles/emacs, tags: ['emacs']}
+    - {role: ../../roles/emacs-neo, tags: ['emacs', 'config']}

@@ -1,0 +1,27 @@
+--- emacs.c
++++ emacs.c
+@@ -2959,6 +2959,10 @@ killed.  */
+ #endif
+       )
+     {
++      if (!NILP(Vneo_emacs_binary)) {
++        /* should check that is actually a string here */
++        initial_emacs_executable = SSDATA(Vneo_emacs_binary);
++      }
+       /* This is very unlikely, but it's possible to execute a binary
+ 	 (on some systems) with no argv.  */
+       if (initial_argc < 1)
+@@ -3634,6 +3638,13 @@ Before Emacs 24.1, the hook was not run in batch mode, i.e., if
+ `noninteractive' was non-nil.  */);
+   Vkill_emacs_hook = Qnil;
+ 
++  DEFVAR_LISP ("neo/emacs-binary", Vneo_emacs_binary,
++	       doc: /* Binary to be executed when kill-emacs
++is called with the intent to restart Emacs.  */);
++  {
++    Vneo_emacs_binary = Qnil;
++  }
++
+   DEFVAR_LISP ("path-separator", Vpath_separator,
+ 	       doc: /* String containing the character that separates directories in
+ search paths, such as PATH and other similar environment variables.  */);

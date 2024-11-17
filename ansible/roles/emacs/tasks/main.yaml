@@ -1,0 +1,10 @@
+---
+
+- name: Install build dependencies for Emacs
+  include_tasks: "install-build-dependencies.yaml"
+  tags:
+    - dependencies
+    
+- name: Install Emacs
+  include_tasks: "build-emacs.yaml"
+  loop: "{{ emacs_versions }}"

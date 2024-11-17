@@ -1,0 +1,58 @@
+---
+
+emacs_versions:
+  - version: 29.1
+    source: release
+    patch: neo_emacs_binary.patch
+    config:
+      - '--with-native-compilation=aot'
+      - '--with-rsvg'
+
+  - version: 29.3
+    source: release
+    patch: neo_emacs_binary.patch
+
+    config:
+      - '--with-native-compilation=aot'
+      - '--with-rsvg'
+      - '--with-tree-sitter'
+      - '--without-sqlite3'
+      - '--with-x-toolkit=gtk3'
+      - '--with-gif'
+      - '--with-png'
+      - '--with-jpeg'
+      - '--with-rsvg'
+      - '--with-tiff'
+
+
+  - version: master
+    source: git
+    patch: neo_emacs_binary.patch
+    config:
+      - '--with-native-compilation=aot'
+      - '--with-rsvg'
+      - '--with-tree-sitter'
+      - '--with-x-toolkit=gtk3'
+      - '--with-gif'
+      - '--with-png'
+      - '--with-jpeg'
+      - '--with-rsvg'
+      - '--with-tiff'
+
+  - version: 29.4
+    source: release
+    patch: neo_emacs_binary.patch
+    config:
+      - '--with-native-compilation=aot'
+      - '--with-rsvg'
+      - '--with-tree-sitter'
+      - '--with-x-toolkit=gtk3'
+      - '--with-gif'
+      - '--with-png'
+      - '--with-jpeg'
+      - '--with-rsvg'
+      - '--with-tiff'
+
+  # - version: 27.2
+  #   source: git
+  #   patch: sigstksz.patch

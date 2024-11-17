@@ -1,0 +1,80 @@
+---
+
+- name: Installing dependencies
+  become: true
+  apt:
+    state: present
+    update_cache: true
+    pkg:
+      - aspell-en
+      - autoconf
+      - automake
+      - autotools-dev
+      - build-essential
+      - build-essential
+      - ca-certificates
+      - cmake
+      - curl
+      - dpkg-dev
+      - git
+      - git
+      - gnupg
+      - imagemagick
+      - ispell
+      - libacl1-dev
+      - libasound2-dev
+      - libcanberra-gtk3-module
+      - libdbus-1-dev
+      - libgccjit0
+      - libgif-dev
+      - libgirepository1.0-dev
+      - libglib2.0-dev
+      - libgnutls28-dev
+      - libgpm-dev
+      - libgtk-3-dev
+      - libharfbuzz-dev
+      - libjansson-dev
+      - libjansson4
+      - libjpeg-dev
+      - liblockfile-dev
+      - libm17n-dev
+      - libmagick++-6.q16-dev
+      - libmagickcore-dev
+      - libmagickwand-dev
+      - libncurses5-dev
+      - libotf-dev
+      - libpng-dev
+      - librsvg2-dev
+      - libselinux1-dev
+      - libsqlite3-dev
+      - libtiff-dev
+      - libtiff5-dev
+      - libtool
+      - libtool-bin
+      - libtree-sitter-dev
+      - libwebp-dev
+      - libx11-dev
+      - libxaw7-dev
+      - libxml2-dev
+      - libxpm-dev
+      - mupdf
+      - mupdf-tools
+      - ncurses-dev
+      - openssh-client
+      - python3
+      - texinfo
+      - wget
+      - xaw3dg-dev
+      - zlib1g-dev
+
+- name: Register gcc version that is installed on system
+  shell: gcc --version | sed -n -e "s,^gcc.* \([0-9]*\)\.[0-9]*\.[0-9]*.*$,\1,p"
+  check_mode: false
+  register: gcc_major_version
+
+- name: "Installing libgccjit-{{gcc_major_version.stdout}}-dev"
+  become: true
+  apt:
+    state: present
+    pkg:
+      - "libgccjit-{{gcc_major_version.stdout}}-dev"

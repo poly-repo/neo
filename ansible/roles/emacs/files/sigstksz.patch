@@ -1,0 +1,12 @@
+--- sysdep.c	2023-05-22 20:21:46.405002275 -0400
++++ patched_sysdep.c	2023-05-22 20:29:20.104526624 -0400
+@@ -1818,7 +1818,8 @@
+ 
+ /* Alternate stack used by SIGSEGV handler below.  */
+ 
+-static unsigned char sigsegv_stack[SIGSTKSZ];
++/* SIGSTKSZ is now a runtime variable and cannot be used where a constant is expected */
++static max_align_t sigsegv_stack[(64 * 1024 + sizeof (max_align_t) - 1) / sizeof (max_align_t)];
+ 
+ 
+ /* Return true if SIGINFO indicates a stack overflow.  */
