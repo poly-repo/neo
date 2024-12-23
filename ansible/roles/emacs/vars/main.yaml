@@ -33,6 +33,7 @@ emacs_versions:
       - '--with-rsvg'
       - '--with-tree-sitter'
       - '--with-x-toolkit=gtk3'
+        #      - '--with-xwidgets'
       - '--with-gif'
       - '--with-png'
       - '--with-jpeg'
