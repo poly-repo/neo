@@ -62,12 +62,8 @@
 (setq no-littering-etc-directory (expand-file-name ".litter/config" user-emacs-directory))
 (setq no-littering-var-directory (expand-file-name ".litter/data" user-emacs-directory))
 
-;; (when (fboundp 'startup-redirect-eln-cache)
-;;   (startup-redirect-eln-cache
-;;    (convert-standard-filename
-;;     (expand-file-name  "var/eln-cache/" user-emacs-directory))))
-
 ;; Set eln-cache dir
+;; [per no-littering reccommendations: https://github.com/emacscollective/no-littering?tab=readme-ov-file#native-compilation-cache]
 (when (boundp 'native-comp-eln-load-path)
   (startup-redirect-eln-cache (expand-file-name "eln-cache/" no-littering-var-directory)))
 
