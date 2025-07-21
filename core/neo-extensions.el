@@ -12,16 +12,6 @@
   url
   path)
 
-;; (cl-defstruct neo/extension
-;;   name
-;;   publisher
-;;   emblem
-;;   description
-;;   categories
-;;   keywords
-;;   requires
-;;   repository)
-
 (cl-defstruct (neo/extension
                (:copier nil))
   name
@@ -47,45 +37,6 @@
 (cl-defgeneric neo/render (object)
   "Render OBJECT at point and return a point marker.")
 
-;; (cl-defmethod neo/render ((ext neo/extension))
-;;   "Render a `neo/extension` EXT at point and return a point marker."
-;;   (let ((start (point)))
-;;     ;; Emblem (non-cursor-highlighted)
-;;     (when-let ((emblem (neo/extension-emblem ext)))
-;;       (when (stringp emblem)
-;;         (insert (propertize " "
-;;                             'display (create-image emblem 'png t)
-;;                             'cursor nil))
-;;         (insert " ")))
-
-;;     ;; Name
-;;     (insert (propertize (or (neo/extension-name ext) "Unnamed")
-;;                         'face '(:weight bold :height 1.2)))
-;;     (insert "\n\n")
-
-;;     ;; Description
-;;     (when-let ((desc (neo/extension-description ext)))
-;;       (insert (propertize desc 'face '(:slant italic :height 0.95)))
-;;       (insert "\n\n"))
-
-;;     ;; Publisher
-;;     (when-let ((pub (neo/extension-publisher ext)))
-;;       (insert (format "%-12s: %s\n" "Publisher" pub)))
-
-;;     ;; Repository details
-;;     (when-let ((repo (neo/extension-repository ext)))
-;;       (neo/render repo))  ;; delegate to repo method
-
-;;     ;; Divider
-;;     (insert "\n" (make-string 60 ?─) "\n\n")
-
-;;     (add-text-properties start (point)
-;;                          `(neo-extension ,ext
-;;                                          mouse-face highlight
-;;                                          help-echo "RET or click to view details"))
-;;     (point-marker)))
-
-
 (cl-defmethod neo/render-details ((ext neo/extension))
   "Render EXT in the current buffer. Return (start . end) position."
   (when-let ((emblem (neo/extension-emblem ext)))
@@ -99,46 +50,6 @@
     (insert "\n\n")
 )
 
-;; (cl-defmethod neo/render ((ext neo/extension))
-;;   "Render EXT in the current buffer. Return (start . end) position."
-;;   (let ((start (point)))
-;;     ;; Insert emblem
-;;     (when-let ((emblem (neo/extension-emblem ext)))
-;;       (when (stringp emblem)
-;;         (insert-image (create-image emblem 'png t))
-;;         (insert " ")))
-
-;;     ;; Title
-;;     (insert (propertize (or (neo/extension-name ext) "Unnamed")
-;;                         'face '(:weight bold :height 1.2)))
-;;     (insert "\n\n")
-;;     ;; Description
-;;     (when-let ((desc (neo/extension-description ext)))
-;;       (insert (propertize desc 'face '(:slant italic :height 0.95)))
-;;       (insert "\n"))
-;;     (insert "\n")
-;;     ;; Info lines
-;;     (let ((repo (neo/extension-repository ext)))
-;;       (dolist (pair `(("Publisher" ,(neo/extension-publisher ext))
-;;                       ("URL" ,(neo/repository-url repo))
-;;                       ("Path" ,(neo/repository-path repo))))
-;; 	        (when (cadr pair)
-;;           (insert (format "%-10s: %s\n" (car pair) (cadr pair))))))
-
-;;     ;; Divider
-;;     (insert (make-string (- (window-text-width) 0) ?─))
-;;     (insert "\n")
-
-
-
-;;     ;; Store text property for activation
-;;     (let ((end (save-excursion
-;;              (goto-char start)
-;;              (when (re-search-forward "^─+$" nil t)
-;;                (beginning-of-line))
-;;              (point))))
-;;       (put-text-property start end 'neo-extension ext)
-;;       (cons start end))))
 (cl-defmethod neo/render ((ext neo/extension))
   "Render EXT in the current buffer. Return (start . end) position."
   (let ((start (point)))
@@ -184,47 +95,6 @@
     (let ((end (point)))
       (put-text-property start end 'neo-extension ext)
       (cons start end))))
-
-
-
-
-
-;; (cl-defmethod neo/render ((ext neo/extension))
-;;   "Render EXT in the current buffer. Return (start . end) position."
-;;   (let* ((emblem (neo/extension-emblem ext))
-;; 	 (img (create-image emblem 'png t)))
-;;     (let ((start (point)))
-;;       (insert " ") ; insert a space
-;;       (add-text-properties start (point) `(display ,img rear-nonsticky t cursor-intangible t invisible nil))
-;;       ;; Title
-;;       (insert (propertize (or (neo/extension-name ext) "Unnamed")
-;;                           'face '(:weight bold :height 1.2)))
-;;       (insert "\n\n")
-;;       ;; Description
-;;       (when-let ((desc (neo/extension-description ext)))
-;; 	(insert (propertize desc 'face '(:slant italic :height 0.95)))
-;; 	(insert "\n"))
-;;       (insert "\n")
-;;       ;; Info lines
-;;       (let ((repo (neo/extension-repository ext)))
-;; 	(dolist (pair `(("Publisher" ,(neo/extension-publisher ext))
-;; 			("Type" ,(neo/repository-type repo))
-;; 			("URL" ,(neo/repository-url repo))
-;; 			("Width" ,(window-text-width))
-;; 			("Path" ,(neo/repository-path repo))))
-;; 	  (when (cadr pair)
-;;             (insert (format "%-10s: %s\n" (car pair) (cadr pair))))))
-;;       ;; Divider
-;;       (insert (make-string (- (window-text-width) 0) ?─))
-;;       (insert "\n")
-;;       ;; Store text property for activation
-;;       (let ((end (save-excursion
-;; 		   (goto-char start)
-;; 		   (when (re-search-forward "^─+$" nil t)
-;; 		     (beginning-of-line))
-;; 		   (point))))
-;; 	(put-text-property start end 'neo-extension ext)
-;; 	(cons start end)))))
 
 
 (cl-defmethod neo/render ((repo neo/repository))
@@ -341,8 +211,10 @@ Args:
 (defun neo/load-extension (ext)
   (let* ((publisher (neo/extension-publisher ext))
 	 (name (neo/normalize-name (neo/extension-name ext)))
-	 (file (format "%s/extensions/%s/%s/%s.el" user-emacs-directory publisher name name)))
-    (message (format "Loading %s/%s from %s" publisher name file))))
+	 (base (expand-file-name "extensions/" user-emacs-directory))
+         (file (expand-file-name (format "%s/%s/%s.el" publisher name name) base)))
+    (message (format "Loading %s/%s from %s" publisher name file))
+    (load file)))
 
 (defun neo/load-extensions (extensions)
   (let ((extensions (neo/sorted-extensions-by-name  extensions)))
@@ -352,177 +224,5 @@ Args:
 (neo/dump-extension-names-and-descriptions extensions)
 (neo/load-extensions extensions)
 
-;; (require 'neo-extensions-summary)
-
-;; (defun neo/sorted-extensions-by-name ()
-;;   "Return a list of `neo/extension` values sorted by name."
-;;   (let (extensions)
-;;     (maphash (lambda (_k v) (push v extensions)) neo/extensions)
-;;     (sort extensions
-;;           (lambda (a b)
-;;             (string< (neo/extension-name a)
-;;                      (neo/extension-name b))))))
-
-;; (neo/extensions-summary-open-buffer (neo/sorted-extensions-by-name))
-
-
 (provide 'neo-extensions)
 
-
-;; ;-----------------------------------------------------------------------------
-
-;; (defgroup neo-extensions nil
-;;   "Settings for Neo Extensions system."
-;;   :group 'neo
-;;   :prefix "neo/extensions-")
-
-
-;; (cl-defstruct neo-extension
-;;   name author forge user repo path description emblem)
-
-;; (require 'neo-extensions-summary)
-
-;; (defcustom neo-extensions-cache-directory
-;;   (let ((xdg-cache (getenv "XDG_CACHE_HOME")))
-;;     (expand-file-name "neo/"
-;;                       (or xdg-cache
-;;                           (expand-file-name "~/.cache/"))))
-;;   "Directory where the neo-extensions cache file will be stored."
-;;   :type 'directory
-;;   :group 'neo-extensions)
-
-;; (defconst neo-extensions-cache-filename "neo-extensions.el"
-;;   "The fixed filename used to cache the extensions data.")
-
-;; (defun neo-extensions-cache-path ()
-;;   "Return the full path to the neo-extensions cache file."
-;;   (expand-file-name neo-extensions-cache-filename neo-extensions-cache-directory))
-
-;; (defun neo/read-extensions-from-file (file)
-;;   "Return a list of (neo/extension ...) forms from FILE."
-;;   (with-temp-buffer
-;;     (insert-file-contents-literally file)
-;;     (let (results)
-;;       (condition-case nil
-;;           (while t
-;;             (push (read (current-buffer)) results))
-;;         (end-of-file (nreverse results))))))
-
-;; (defun neo/extension-plist (ext)
-;;   "Return the plist of a neo/extension form EXT."
-;;   (cdr ext))
-
-;; (defun neo/render-extension (plist)
-;;   "Insert a formatted block for one extension described by PLIST."
-;;   (let ((start (point)))
-;;     (let ((emblem (plist-get plist :emblem)))
-;;       (when (and emblem (stringp emblem))
-;; ;        (insert-image (create-image emblem 'png t))
-;; 	(insert (propertize " " 'display (create-image emblem 'png t)))
-;;         (insert " ")))
-;;     (insert (propertize (or (plist-get plist :name) "Unnamed")
-;;                         'face '(:weight bold :height 1.2)))
-;;     (insert "\n\n")
-;;     (when-let* ((desc (plist-get plist :description)))
-;;       (insert (propertize desc 'face '(:slant italic :height 0.95)))
-;;       (insert "\n"))
-;;     (insert "\n")
-;;     (dolist (key '(:author :forge :user :repo :path))
-;;       (when-let* ((val (plist-get plist key)))
-;;         (insert (format "%-10s: %s\n" (substring (symbol-name key) 1) val))))
-;;     (insert "\n")
-;;     (insert (make-string 60 ?─))
-;;     (insert "\n\n")))
-
-;; (defun neo/show-extensions-buffer (file)
-;;   "Parse and display neo/extension records from FILE in a nicely formatted buffer."
-;;   (interactive "fPath to neo-extensions.el: ")
-;;   (let* ((extensions (neo/read-extensions-from-file file))
-;;          (buf (get-buffer-create "*Neo Extensions*")))
-;;     (with-current-buffer buf
-;;       (read-only-mode -1)
-;;       (erase-buffer)
-;;       (dolist (ext extensions)
-;;         (neo/render-extension (neo/extension-plist ext)))
-;;       (goto-char (point-min))
-;;       (read-only-mode 1)
-;;       (special-mode))
-;;     (display-buffer buf)))
-
-;; (neo/show-extensions-buffer "~/Projects/uno/neo-extensions.el")
-
-;; (require 'wid-edit)
-
-;; (defun neo-extensions-settings-buffer ()
-;;   "Display a buffer with custom widgets like `customize-group`."
-;;   (interactive)
-;;   (let ((buf (get-buffer-create "*Neo Extensions Settings*")))
-;;     (with-current-buffer buf
-;;       (kill-all-local-variables)
-;;       (let ((inhibit-read-only t))
-;;         (erase-buffer))
-;;       (remove-overlays)
-;;       (widget-insert "Configure Neo Extensions:\n\n")
-
-;;       ;; Example: directory selector
-;;       (widget-create 'file
-;;                      :tag "Cache Directory"
-;;                      :format "%t: %v\n"
-;;                      :must-match t
-;;                      :size 40
-;;                      :value neo-extensions-cache-directory
-;;                      :notify (lambda (widget &rest _ignore)
-;;                                (setq neo-extensions-cache-directory (widget-value widget))))
-
-;;       ;; Example: toggle
-;;       (widget-create 'checkbox t)
-;;       (widget-insert " Enable something\n")
-
-;;       ;; Save button
-;;       (widget-create 'push-button
-;;                      :notify (lambda (&rest _)
-;;                                (message "Saved: %s" neo-extensions-cache-directory))
-;;                      "Save")
-
-;;       (use-local-map widget-keymap)
-;;       (widget-setup))
-;;     (switch-to-buffer buf)))
-
-;; (neo-extensions-settings-buffer)
-
-;; 					;--------------------------------------------------------------------------------------
-;; (defvar neo/saved-window-configuration nil
-;;   "Holds the saved window configuration before custom layout.")
-
-;; (defcustom neo/sidebar-ratio 0.33
-;;   "Ratio (0 < RATIO < 1) of the left sidebar when splitting the frame."
-;;   :type 'float
-;;   :group 'neo-extensions)
-
-;; (defun neo/setup-side-split ()
-;;   "Save the current window configuration and split the frame side-by-side.
-;; Left window will be `neo/sidebar-ratio` of the frame width."
-;;   (interactive)
-;;   (when (bound-and-true-p golden-ratio-mode)
-;;     (golden-ratio-mode -1))
-;;   ;; Save current window configuration
-;;   (setq neo/saved-window-configuration (current-window-configuration))
-
-;;   ;; Clear current layout
-;;   (delete-other-windows)
-
-;;   ;; Split window vertically (side-by-side)
-;;   (let* ((total-width (window-total-width))
-;;          (left-width (floor (* total-width (- 1.0 neo/sidebar-ratio))))
-;;          (left-window (selected-window))
-;;          (right-window (split-window left-window left-width t))) ;; 't' means horizontally
-;;     ;; Optionally, you can switch to buffers in each window here
-;;     (select-window left-window)))
-
-;; (defun neo/restore-window-configuration ()
-;;   "Restore the previously saved window configuration."
-;;   (interactive)
-;;   (when neo/saved-window-configuration
-;;     (set-window-configuration neo/saved-window-configuration)))
-
-;; (provide 'neo-extensions)
