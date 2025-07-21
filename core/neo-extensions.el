@@ -25,6 +25,7 @@
 (cl-defstruct (neo/extension
                (:copier nil))
   name
+  title
   publisher
   emblem
   description
@@ -245,7 +246,7 @@
 (defvar neo/extensions (make-hash-table :test #'equal)
   "Hash table mapping publisher/name to `neo/extension` instances.")
 
-(defun neo/dump-extension-names-and-descriptions ()
+(defun neo/dump-extension-names-and-descriptions (extensions)
   "Display names and descriptions from `neo/extensions` in a temporary buffer."
   (interactive)
   (let ((buf (generate-new-buffer "*Neo Extensions Summary*")))
@@ -255,16 +256,24 @@
        (lambda (_key ext)
          (insert (format "• %s\n  %s\n\n"
                          (or (neo/extension-name ext) "Unnamed")
-                         (or (neo/extension-description ext) "No description."))))
-       neo/extensions))
+                         (or (neo/extension-description ext) "No description.")))
+	 (insert (format "  Requires: %s\n"
+                         (mapconcat #'identity (neo/extension-requires ext) ", ")))
+	 (insert "\n\n"))
+       extensions))
     (pop-to-buffer buf)))
 
 
-(defun neo//normalize-name (name)
+(defun neo/normalize-name (name)
   "Normalize NAME by downcasing and replacing spaces with dashes."
   (replace-regexp-in-string
    " " "-"
    (downcase name)))
+
+(defun neo/extension-blurb (ext)
+  (format "%s/%s" (neo/extension-publisher ext) (neo/normalize-name (neo/extension-name ext))))
+
+;;; TODO replace blurb with slug
 
 (defmacro neo/extension (&rest args)
   "Register a new Neo extension and store it in `neo/extensions`.
@@ -278,41 +287,70 @@ Args:
 - :requires (LIST of symbols or a single symbol)
 - :repository (plist with :type, :url, :path)"
   (let* ((name (plist-get args :name))
-	 (normalized-name (neo//normalize-name name))
+	 (title (plist-get args :title))
+	 (normalized-name (neo/normalize-name name))
          (publisher (plist-get args :publisher))
          (desc (plist-get args :description))
          (cats (plist-get args :categories))
          (tags (plist-get args :keywords))
 	 (emblem (plist-get args :emblem))
-         (requires (let ((r (plist-get args :requires)))
-                 (if (listp r) r (list r))))
-         (provides (let ((r (plist-get args :provides)))
-                 (if (listp r) r (list r))))
-         (depends-on (let ((r (plist-get args :depends-on)))
-                 (if (listp r) r (list r))))
+         (requires (plist-get args :requires))
+         (provides (plist-get args :provides))
+         (depends-on (plist-get args :depends-on))
+	 (require-list (mapcar (lambda (x) (symbol-name x))
+                               (if (listp requires) requires (list requires))))
+         (provide-list (mapcar (lambda (x) (symbol-name x))
+                               (if (listp provides) provides (list provides))))
+         (depend-list (mapcar (lambda (x) (symbol-name x))
+                              (if (listp depends-on) depends-on (list depends-on))))
          (repo-raw (plist-get args :repository))
-         (repo `(make-neo/repository
-                 :type ,(plist-get repo-raw :type)
-                 :url ,(plist-get repo-raw :url)
-                 :path ,(plist-get repo-raw :path)))
-         (blurb (format "%s/%s" publisher normalized-name)))
-    `(puthash ,blurb
-              (make-neo/extension
-               :name ,name
-               :publisher ,publisher
-               :description ,desc
-	       :emblem ,emblem
-               :categories ',cats
-               :keywords ',tags
-               :requires ',requires
-               :provides ',provides
-               :depends-on ',depends-on
-               :repository ,repo
-	       :summary-overlay nil)
-              neo/extensions)))
+         (repo (make-neo/repository
+                 :type (plist-get repo-raw :type)
+                 :url (plist-get repo-raw :url)
+                 :path (plist-get repo-raw :path)))
+	 (extension (make-neo/extension
+		     :name name
+		     :title title
+		     :publisher publisher
+		     :description desc
+		     :emblem emblem
+		     :categories cats
+		     :keywords tags
+		     :requires require-list
+		     :provides provide-list
+		     :depends-on depend-list
+		     :repository repo
+		     :summary-overlay nil))
+         (blurb (neo/extension-blurb extension)))
+    `(puthash ,blurb ,extension neo/extensions)))
 
-(load "~/Projects/uno/neo-extensions.el")
-(neo/dump-extension-names-and-descriptions)
+(defun neo/load-extension-manifests (extensions-summary-file)
+  (load extensions-summary-file)
+  neo/extensions)
+
+  
+(defun neo/sorted-extensions-by-name (extensions)
+  "Return a list of `neo/extension` values sorted by name."
+  (let (extension-list)
+    (maphash (lambda (_k v) (push v extension-list)) extensions)
+    (sort extension-list
+          (lambda (a b)
+            (string< (neo/extension-name a)
+                     (neo/extension-name b))))))
+
+(defun neo/load-extension (ext)
+  (let* ((publisher (neo/extension-publisher ext))
+	 (name (neo/normalize-name (neo/extension-name ext)))
+	 (file (format "%s/extensions/%s/%s/%s.el" user-emacs-directory publisher name name)))
+    (message (format "Loading %s/%s from %s" publisher name file))))
+
+(defun neo/load-extensions (extensions)
+  (let ((extensions (neo/sorted-extensions-by-name  extensions)))
+    (mapcar #'neo/load-extension extensions)))
+
+(setq extensions (neo/load-extension-manifests "~/Projects/uno/neo-extensions.el"))
+(neo/dump-extension-names-and-descriptions extensions)
+(neo/load-extensions extensions)
 
 ;; (require 'neo-extensions-summary)
 
