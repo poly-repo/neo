@@ -1,0 +1,6 @@
+#!/bin/bash
+# Ehi, Emacs, this is -*- shell-script -*-
+
+
+# -e "@my-vars.yaml"
+ANSIBLE_CALLBACKS_ENABLED=profile_tasks ansible-playbook -i localhost, infra/ansible/playbooks/emacs-install/main.yaml --connection=local -e "@~/Projects/uno/emacs.yaml"

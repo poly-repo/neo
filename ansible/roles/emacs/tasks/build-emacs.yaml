@@ -193,6 +193,13 @@
         cmd: "make --jobs {{ansible_processor_vcpus}} install"
         chdir: "{{emacs_build_dir}}"
       become: true
+    - name: Copy Emacs src directory to installed location
+      ansible.builtin.copy:
+        src: "{{ emacs_source_dir }}/src"
+        dest: "{{ emacs_target_dir }}"
+        remote_src: yes
+        mode: preserve
+      become: true      
     - name: remove directory
       ansible.builtin.file:
         path: "{{source_dir.path}}"
