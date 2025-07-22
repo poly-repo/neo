@@ -1,8 +1,4 @@
-(defgroup neo nil
-  "Configuration group for NEO Emacs"
-  :prefix "neo/"
-  :group 'emacs)
-
+(require 'neo-custom)
 (require 'neo-utils)
 (require 'neo-packages)
 (require 'neo-extensions)

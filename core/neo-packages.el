@@ -1,3 +1,8 @@
+;; -*- lexical-binding: t -*-
+
+(require 'map)
+
+
 ;;; NOTE this first definition wins so that we don't have to remember
 ;;; to modify the installer and we can simply copy and paste it.
 ;;; It would be great if elpaca provided that as a downloadable asset
@@ -54,74 +59,107 @@
 ;;; frame that cannot even been grown.
 ;;; TODO: fix the mess for real
 ;;; for now, I just disable this, as I have everything installed.
-(defvar neo/ignore-ensure-system-package t)
+(defcustom neo/ignore-ensure-system-package t
+  "If non-nil, disables the use of `ensure-system-package` in `neo/use-package`.
 
-(defun neo/filter-package-args (args)
-  (let ((ignore-list
-         (append
-          '(:doc)
-          (if neo/ignore-ensure-system-package
-              '(:ensure-system-package)
-            '()))))
-    (mapc (lambda (el) (setq args (map-delete args el))) ignore-list)
-    args))
+This is useful when system dependencies are already satisfied or managed externally.
+But it was introduced because elpaca had a problem with it:
+  ensure-system-package uses an async buffer (in a side window) which in turns
+  causes the dashboard to be locked in there, a small window at the bottom of the
+  frame that cannot even been grown.
+"
+  :type 'boolean
+  :group 'neo-packages)
 
-(defvar neo/installed-packages nil)
+;(defvar neo--installed-packages nil) ; TODO is this used
 
 ;;; NOTE: if performance becomes problematic we can move to a hash
 ;;; table:
 ;;; (defvar neo/extension-package-map (make-hash-table :test #'equal)
 ;;;  "Mapping of (USER . EXTENSION) to list of packages used.")
-(defvar neo/extension-package-forms nil
+(defvar neo--enabled-packages nil
   "Alist mapping (USER . EXTENSION) to a list of unexpanded `neo/use-package` forms.")
 
+(defun neo--sectioned-list->alist (data)
+  "Convert a flat sectioned keyword list into an alist.
 
-;;; TODO: add a key 'var' and automatically split between :config and
-;;; :custom
-;;; NOTE: probably not needed as treating everything as
-;;; 'customizeable' should work.
-;; (defmacro neo/use-package (name &rest args)
-;;   "Augment use-package with Neo specific functionality."
-;;   (declare (indent defun))
-;;   (setq neo/installed-packages (append neo/installed-packages `(,name)))
-;;   (let* ((ensure (if (string= name "emacs") (list :ensure nil) '()))
-;; 	 (args (append (neo/filter-package-args args) ensure))
-;; 	 (file (or load-file-name
-;;                    buffer-file-name
-;;                    "unknown")))
-;;     (message (format "Expanded in %s" file))
-;;     `(use-package
-;;       ,name
-;;       ;     :elpaca nil
-;;       ,@args)))
+DATA is a list where keywords (e.g., :vars, :custom) are followed by grouped
+forms (e.g., (foo t)). Returns an alist of (KEY . LIST-OF-FORMS).
+
+Duplicate keys are merged."  
+  (let ((result '())
+        (current-key nil))
+    (dolist (item data)
+      (if (keywordp item)
+          (setq current-key item)
+        (when current-key
+          (let ((existing (alist-get current-key result nil nil #'eq)))
+            (setf (alist-get current-key result nil nil #'eq)
+                  (append existing (list item)))))))
+    result))
+
+(defun neo--alist->sectioned-list (alist)
+  "Convert an ALIST of grouped keyword sections back into a flat sectioned list.
+
+Each key maps to a list of forms. Produces a flat list like:
+  (:key form1 form2 ... :next-key ...)"
+  (apply #'append
+         (mapcar (lambda (entry)
+                   (let ((key (car entry))
+                         (forms (cdr entry)))
+                     (cons key forms)))
+                 alist)))
+
+(defun neo--alist-append (alist key value)
+  "Add VALUE to the list associated with KEY in ALIST.
+
+If KEY is not present, insert a new entry with (KEY . (VALUE)).
+Returns the updated ALIST."
+  (let ((entry (assoc key alist)))
+    (if entry
+        (setcdr entry (append (cdr entry) (list value)))
+      (setq alist (cons (cons key (list value)) alist))))
+  alist)
+
+(defun neo--alist-remove-key (key alist)
+  "Return a new ALIST with all entries for KEY removed.
+
+Uses `eq` for key comparison, like `assq-delete-all`."
+  (assq-delete-all key alist))
+
+
+(defun neo--normalize-use-package-arguments (args)
+  (let* ((args-alist (neo--sectioned-list->alist args))
+	 (args-alist (neo--alist-remove-key :doc args-alist))
+	 (args (neo--alist->sectioned-list args-alist)))
+    args))
 
 (defmacro neo/use-package (name &rest args)
   "Augment `use-package` with Neo-specific tracking and filtering.
 
-Stores the partially-expanded use-package form in `neo/extension-package-forms`
-indexed by the current user and the base filename of the loading extension."
+Stores the raw `use-package` form in `neo--enabled-packages`
+indexed by (user . extension-base-name)."
   (declare (indent defun))
   (let* ((ensure (if (string= name "emacs") (list :ensure nil) '()))
-         (args (append (neo/filter-package-args args) ensure))
+;         (args (append (neo/filter-package-args args) ensure))
+         (args (append (neo--normalize-use-package-arguments args) ensure))
          (file (or load-file-name buffer-file-name "unknown"))
          (user (user-login-name))
          (extension (file-name-base file))
          (key (cons user extension))
          (real-form `(use-package ,name ,@args))
-         (expanded (macroexpand real-form))
-         (existing (alist-get key neo/extension-package-forms nil nil #'equal)))
-    ;; Update the alist, prepending to the form list
-    (setq neo/extension-package-forms
-          (cons `(,key . ,(cons expanded existing))
-                (assq-delete-all key neo/extension-package-forms)))
-    real-form))
+         (existing (alist-get key neo--enabled-packages nil nil #'equal)))
+    ;; Store the raw form, not the expanded one
+    `(setq neo--enabled-packages
+           (cons (cons ',key (cons ',real-form ',existing))
+                 (assq-delete-all ',key neo--enabled-packages)))))
 
 (defun neo/replay-extension-packages (&optional user extension)
   "Replay all stored `use-package` expansions.
 
 If USER and EXTENSION are provided, only replays that entry."
   (interactive)
-  (dolist (entry neo/extension-package-forms)
+  (dolist (entry neo--enabled-packages)
     (let ((key (car entry))
           (forms (cdr entry)))
       (when (or (not user)

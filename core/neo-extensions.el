@@ -1,7 +1,6 @@
 (require 'cl-lib)
 (require 'cl-generic)
 
-
 (defgroup neo-extensions nil
   "Settings for Neo Extensions system."
   :group 'neo
@@ -113,11 +112,12 @@
     (when-let ((val (slot-value repo key)))
       (insert (format "%-12s: %s\n" (capitalize (symbol-name key)) val)))))
 
-(defvar neo/extensions (make-hash-table :test #'equal)
+(defvar neo--extensions (make-hash-table :test #'equal)
   "Hash table mapping publisher/name to `neo/extension` instances.")
 
-(defun neo/dump-extension-names-and-descriptions (extensions)
-  "Display names and descriptions from `neo/extensions` in a temporary buffer."
+;;; This is for debugging
+(defun neo--dump-sxtension-names-and-descriptions (extensions)
+  "Display names and descriptions from `neo--extensions` in a temporary buffer."
   (interactive)
   (let ((buf (generate-new-buffer "*Neo Extensions Summary*")))
     (with-current-buffer buf
@@ -134,19 +134,19 @@
     (pop-to-buffer buf)))
 
 
-(defun neo/normalize-name (name)
+(defun neo--normalize-name (name)
   "Normalize NAME by downcasing and replacing spaces with dashes."
   (replace-regexp-in-string
    " " "-"
    (downcase name)))
 
-(defun neo/extension-blurb (ext)
-  (format "%s/%s" (neo/extension-publisher ext) (neo/normalize-name (neo/extension-name ext))))
+(defun neo--extension-slug (ext)
+  (format "%s/%s" (neo/extension-publisher ext) (neo--normalize-name (neo/extension-name ext))))
 
 ;;; TODO replace blurb with slug
 
 (defmacro neo/extension (&rest args)
-  "Register a new Neo extension and store it in `neo/extensions`.
+  "Register a new Neo extension and store it in `neo--extensions`.
 
 Args:
 - :name NAME (string)
@@ -158,7 +158,7 @@ Args:
 - :repository (plist with :type, :url, :path)"
   (let* ((name (plist-get args :name))
 	 (title (plist-get args :title))
-	 (normalized-name (neo/normalize-name name))
+	 (normalized-name (neo--normalize-name name))
          (publisher (plist-get args :publisher))
          (desc (plist-get args :description))
          (cats (plist-get args :categories))
@@ -191,15 +191,15 @@ Args:
 		     :depends-on depend-list
 		     :repository repo
 		     :summary-overlay nil))
-         (blurb (neo/extension-blurb extension)))
-    `(puthash ,blurb ,extension neo/extensions)))
+         (blurb (neo--extension-slug extension)))
+    `(puthash ,blurb ,extension neo--extensions)))
 
-(defun neo/load-extension-manifests (extensions-summary-file)
+(defun neo--load-extension-manifests (extensions-summary-file)
   (load extensions-summary-file)
-  neo/extensions)
+  neo--extensions)
 
   
-(defun neo/sorted-extensions-by-name (extensions)
+(defun neo--sorted-extensions-by-name (extensions)
   "Return a list of `neo/extension` values sorted by name."
   (let (extension-list)
     (maphash (lambda (_k v) (push v extension-list)) extensions)
@@ -208,21 +208,24 @@ Args:
             (string< (neo/extension-name a)
                      (neo/extension-name b))))))
 
-(defun neo/load-extension (ext)
+(defun neo--load-extension (ext)
   (let* ((publisher (neo/extension-publisher ext))
-	 (name (neo/normalize-name (neo/extension-name ext)))
+	 (name (neo--normalize-name (neo/extension-name ext)))
 	 (base (expand-file-name "extensions/" user-emacs-directory))
          (file (expand-file-name (format "%s/%s/%s.el" publisher name name) base)))
     (message (format "Loading %s/%s from %s" publisher name file))
     (load file)))
 
 (defun neo/load-extensions (extensions)
-  (let ((extensions (neo/sorted-extensions-by-name  extensions)))
-    (mapcar #'neo/load-extension extensions)))
+  (let ((extensions (neo--sorted-extensions-by-name  extensions)))
+    (mapcar #'neo--load-extension extensions)))
 
-(setq extensions (neo/load-extension-manifests "~/Projects/uno/neo-extensions.el"))
-(neo/dump-extension-names-and-descriptions extensions)
+(setq extensions (neo--load-extension-manifests "~/Projects/uno/neo-extensions.el"))
+(neo--dump-sxtension-names-and-descriptions extensions)
 (neo/load-extensions extensions)
+
+(require 'neo-packages)
+(neo/replay-extension-packages)
 
 (provide 'neo-extensions)
 
