@@ -49,25 +49,86 @@
     (insert "\n\n")
 )
 
+(defvar neo/info-icon-map
+  (let ((map (make-sparse-keymap)))
+    ;; prevent clicks from going through to surrounding buttons or rows
+    (define-key map [mouse-1] #'ignore)
+    (define-key map [mouse-2] #'ignore)
+    (define-key map [mouse-3] #'ignore)
+    map)
+  "Keymap for info icons to prevent buffer-switching clicks.")
+
+(defun neo/show-posframe-info (info)
+  "Show INFO (list of (label . value)) in a posframe popup."
+  (let* ((label-face '(:weight bold))
+         (value-face '(:foreground "#6cf"))
+         (text (mapconcat (lambda (pair)
+                            (concat
+                             (propertize (format "%-10s" (car pair)) 'face label-face)
+                             (propertize (cdr pair) 'face value-face)))
+                          info "\n")))
+    (when (featurep 'posframe)
+      (posframe-show
+       "*neo-info*"
+       :string text
+       :position (point)
+       :timeout 5
+       :background-color (face-background 'tooltip nil t)
+       :internal-border-width 10
+       :internal-border-color "#888"))))
+
+(defun neo/make-hover-callback (info)
+  "Return a help-echo callback that displays INFO on hover."
+  (lambda (_win _obj _pos)
+    (neo/show-posframe-info info)
+    ;; Returning a string here still lets the echo area show text too if desired
+    nil))
+
+(neo/use-package posframe :ensure t)
+;(require 'posframe)
+
 (cl-defmethod neo/render ((ext neo/extension))
   "Render EXT in the current buffer. Return (start . end) position."
   (let ((start (point)))
-
     ;; Insert image using overlay
-    (when-let ((emblem (neo/extension-emblem ext)))
-      (when (stringp emblem)
-        (let ((img (create-image emblem 'png t)))
+      (let* ((emblem (neo/extension-emblem ext))
+	     (img (if (stringp emblem)
+		     (create-image emblem 'png t :data-p t)
+		   (create-image (expand-file-name "assets/default-emblem64.png" user-emacs-directory) 'png))))
           ;; Insert a space and record its bounds *after* insertion
           (insert " ")
           (let ((ov (make-overlay (1- (point)) (point))))
             (overlay-put ov 'display img)
             (overlay-put ov 'neo-image t)
             ;; Store it in the extension struct
-            (setf (neo/extension-summary-overlay ext) ov)))))
+            (setf (neo/extension-summary-overlay ext) ov)))
+    
+    ;; ;; Insert image using overlay
+    ;; (when-let ((emblem (neo/extension-emblem ext)))
+    ;;   (when (stringp emblem)
+    ;;     (let ((img (create-image emblem 'png t)))
+    ;;       ;; Insert a space and record its bounds *after* insertion
+    ;;       (insert " ")
+    ;;       (let ((ov (make-overlay (1- (point)) (point))))
+    ;;         (overlay-put ov 'display img)
+    ;;         (overlay-put ov 'neo-image t)
+    ;;         ;; Store it in the extension struct
+    ;;         (setf (neo/extension-summary-overlay ext) ov)))))
     
     (insert " ") ;; optional visual spacing
 
     ;; Title
+    (let ((info '(("Publisher" . "neo")
+		  ("Type" . "git")
+		  ("URL" . "https://github.com/poly-repo/neo-extensions.git")
+		  ("Path" . "extensions/uno/news"))))
+      (insert
+       (propertize "❓"
+		   'help-echo (neo/make-hover-callback info)
+		   'mouse-face 'default ; 'highlight
+		   'keymap neo/info-icon-map)))
+
+    
     (insert (propertize (or (neo/extension-name ext) "Unnamed")
                         'face '(:weight bold :height 1.2)))
     (insert "\n\n")
@@ -77,24 +138,71 @@
       (insert (propertize desc 'face '(:slant italic :height 0.95)))
       (insert "\n\n"))
 
-    ;; Info block
-    (let ((repo (neo/extension-repository ext)))
-      (dolist (pair `(("Publisher" ,(neo/extension-publisher ext))
-                      ("Type" ,(neo/repository-type repo))
-                      ("URL" ,(neo/repository-url repo))
-                      ("Path" ,(neo/repository-path repo))))
-        (when (cadr pair)
-          (insert (format "%-10s: %s\n" (car pair) (cadr pair))))))
+
+    ;; ;; Info block
+    ;; (let ((repo (neo/extension-repository ext)))
+    ;;   (dolist (pair `(("Publisher" ,(neo/extension-publisher ext))
+    ;;                   ("Type" ,(neo/repository-type repo))
+    ;;                   ("URL" ,(neo/repository-url repo))
+    ;;                   ("Path" ,(neo/repository-path repo))))
+    ;;     (when (cadr pair)
+    ;;       (insert (format "%-10s: %s\n" (car pair) (cadr pair))))))
 
     ;; Divider
-    (let ((width (1- (or (window-body-width nil t) 80))))
-      (insert (make-string width ?─) "\n"))
-
+    ;; (let ((width (1- (or (window-body-width nil t) 80))))
+    ;;   (insert (make-string width ?─) "\n"))
+    ;; (insert
+    ;;  (propertize " "
+    ;; 		 'display '(space :align-to right)
+    ;; 		 'face '(:background "gray30")))
+    ;; (insert "\n")
+    (neo/insert-thin-divider)
+    
     ;; Final range
     (let ((end (point)))
       (put-text-property start end 'neo-extension ext)
       (cons start end))))
 
+(defun neo/insert-thin-divider (&optional color)
+  "Insert a thin horizontal divider using underline, aligned to window width.
+If COLOR is nil, use the theme's default foreground color."
+  (let* ((line-color (or color (face-foreground 'default nil t)))
+         (bg-color   (face-background 'default nil t)))
+;    (insert "\n")
+    (insert
+     (propertize " "
+                 'display '(space :align-to right)
+                 'face `(:overline ,line-color
+                         :foreground ,bg-color
+                         :background ,bg-color)))
+    (insert "\n")))
+
+(defun neo/show-extension-info (info-list)
+  "Show INFO-LIST (alist of (label . value)) in a posframe or tooltip.
+Labels are bolded, values are colored."
+  (let* ((label-face '(:weight bold))
+         (value-face '(:foreground "#6cf"))
+         (formatted-lines
+          (mapcar (lambda (pair)
+                    (concat
+                     (propertize (format "%-10s" (car pair)) 'face label-face)
+                     (propertize (cdr pair) 'face value-face)))
+                  info-list))
+         (info-text (string-join formatted-lines "\n")))
+    (if (featurep 'posframe)
+        (posframe-show "*neo-extension-info*"
+                       :string info-text
+                       :background-color (face-background 'tooltip nil t)
+                       :position (point)
+                       :timeout 5
+                       :internal-border-width 10
+                       :internal-border-color "#888")
+      (tooltip-show info-text))))
+
+(defun neo/make-info-hover-handler (info-list)
+  "Return a hover handler for INFO-LIST usable as `help-echo'."
+  (lambda (_win _obj _pos)
+    (neo/show-extension-info info-list)))
 
 (cl-defmethod neo/render ((repo neo/repository))
   "Insert NE0/REPOSITORY REPO details at point. Return point marker."
@@ -220,9 +328,52 @@ Args:
   (let ((extensions (neo--sorted-extensions-by-name  extensions)))
     (mapcar #'neo--load-extension extensions)))
 
-(setq extensions (neo--load-extension-manifests "~/Projects/uno/neo-extensions.el"))
+;; TODO only fetch if older than X hours unless FORCE is used
+(defun neo/fetch-extensions ()
+  "Download and cache the latest neo-extensions.el if the SHA has changed.
+Keeps a copy in ~/.cache/neo/extensions/."
+  (let* ((base-url "https://github.com/poly-repo/neo-extensions/releases/download/latest/")
+         (filename "neo-extensions.el")
+         (sha-filename "neo-extensions.sha256")
+         (cache-dir (expand-file-name "~/.cache/neo/extensions/"))
+         (file-path (expand-file-name filename cache-dir))
+         (sha-path (expand-file-name sha-filename cache-dir))
+         (sha-latest-path (expand-file-name (concat sha-filename ".latest") cache-dir))
+         (file-url (concat base-url filename))
+         (sha-url (concat base-url sha-filename)))
+    
+    (unless (file-directory-p cache-dir)
+      (make-directory cache-dir t))
+
+    (url-copy-file sha-url sha-latest-path t)
+
+    (let ((update-needed (or (not (file-exists-p file-path))
+                             (not (file-exists-p sha-path))
+                             (not (string= (with-temp-buffer
+                                             (insert-file-contents sha-latest-path)
+                                             (buffer-string))
+                                           (with-temp-buffer
+                                             (insert-file-contents sha-path)
+                                             (buffer-string)))))))
+      (when update-needed
+        (message "Updating neo-extensions.el...")
+        (url-copy-file file-url file-path t)
+        (rename-file sha-latest-path sha-path t)
+        (message "neo-extensions.el updated."))
+      (unless update-needed
+        (delete-file sha-latest-path)
+        (message "neo-extensions.el is up to date.")))
+
+    file-path))
+
+(neo/fetch-extensions)
+(setq extensions (neo--load-extension-manifests "~/.cache/neo/extensions/neo-extensions.el"))
 (neo--dump-sxtension-names-and-descriptions extensions)
+;;; Actually load the extensions
 (neo/load-extensions extensions)
+
+(require 'neo-extensions-summary)
+(neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
 
 (require 'neo-packages)
 (neo/replay-extension-packages)

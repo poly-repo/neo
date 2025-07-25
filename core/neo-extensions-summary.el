@@ -63,15 +63,15 @@
 			(pcase-let ((`(,range ,overlay) (neo/render ext)))
 			  (setf (neo/extension-summary-overlay ext) overlay)
 			  (cons range ext)))
-		      extensions)))
+		      extensions))))))
 
-        ;; (setq neo-extensions--positions
-        ;;       (mapcar (lambda (ext)
-        ;;                 (let ((range (neo/render ext)))
-        ;;                   ;; Store (range . ext)
-        ;;                   (cons range ext)))
-        ;;               extensions)))
-      (neo/extensions-highlight-current))))
+      ;;   ;; (setq neo-extensions--positions
+      ;;   ;;       (mapcar (lambda (ext)
+      ;;   ;;                 (let ((range (neo/render ext)))
+      ;;   ;;                   ;; Store (range . ext)
+      ;;   ;;                   (cons range ext)))
+      ;;   ;;               extensions)))
+      ;; (neo/extensions-highlight-current))))
 
 ;; (defun neo/activate-extension-at-point ()
 ;;   "Open detailed view for the extension under point."
