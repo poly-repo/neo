@@ -44,7 +44,7 @@
       (insert " ")))
 
     ;; Title
-    (insert (propertize (or (neo/extension-name ext) "Unnamed")
+    (insert (propertize (or (neo/extension-title ext) "Unnamed")
                         'face '(:weight bold :height 1.5)))
     (insert "\n\n")
 )
@@ -129,7 +129,7 @@
 		   'keymap neo/info-icon-map)))
 
     
-    (insert (propertize (or (neo/extension-name ext) "Unnamed")
+    (insert (propertize (or (neo/extension-title ext) "Unnamed")
                         'face '(:weight bold :height 1.2)))
     (insert "\n\n")
 
