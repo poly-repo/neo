@@ -160,4 +160,23 @@ Writes to ~/.config/neo/INSTANCE-early-init-config.el"
           specs))
      (message "neo/hacking: wrote early-init config to %s" target-file)))
 
+(defun neo/path-join (&rest segments)
+  "Join SEGMENTS into a single normalized path.
+Handles redundant slashes and expands `~` to the home directory."
+  (let ((path (car segments)))
+    (dolist (segment (cdr segments) path)
+      (setq path (expand-file-name segment (file-name-as-directory path))))))
+
+(defun neo/ensure-directory-exists (dir)
+  "Ensure DIR exists. Create it and its parents if necessary.
+Returns the absolute expanded path to DIR."
+  (let ((full-dir (expand-file-name dir)))
+    (unless (file-directory-p full-dir)
+      (make-directory full-dir t))
+    full-dir))
+
+(defun neo/native-cache (package)
+  (let ((dir (neo/path-join "~/.cache" "neo" emacs-version package)))
+    (neo/ensure-directory-exists dir)))
+
 (provide 'neo-utils)
