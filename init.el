@@ -36,4 +36,4 @@
       (find-file-noselect file))))
 (setq vc-follow-symlinks t)
 (setq enable-local-variables :all)
-(neo/visit-all-elisp-files)
+;(neo/visit-all-elisp-files)
