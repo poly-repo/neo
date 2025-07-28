@@ -176,6 +176,19 @@ If USER and EXTENSION are provided, only replays that entry."
  ;; Assume :elpaca t unless otherwise specified.
  (setq elpaca-use-package-by-default t))
 
+(defun neo--elpaca-bury-logs-if-clean ()
+  "Bury *elpaca-logs* buffer unless it contains 'error' or warnings."
+  (let ((buf (get-buffer "*elpaca-logs*")))
+    (when (and buf (buffer-live-p buf))
+      (with-current-buffer buf
+        (goto-char (point-min))
+        (if (re-search-forward "\\(error\\|failed\\|warning\\)" nil t)
+            (message "elpaca log contains errors or warnings")
+          (bury-buffer buf))))))
+
+(add-hook 'elpaca-after-init-hook #'neo--elpaca-bury-logs-if-clean)
+
+
 ;;; TODO: figure out where duplicate packages get queued
 ;;; till then is very annoying to see things like:
 ;;; ⛔ Warning (emacs): Duplicate item queued: ace-window
