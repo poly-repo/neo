@@ -84,7 +84,7 @@
     ;; Returning a string here still lets the echo area show text too if desired
     nil))
 
-(neo/use-package posframe :ensure t)
+;(neo/use-package posframe :ensure t)
 ;(require 'posframe)
 
 (cl-defmethod neo/render ((ext neo/extension))
@@ -118,16 +118,15 @@
     (insert " ") ;; optional visual spacing
 
     ;; Title
-    (let ((info '(("Publisher" . "neo")
-		  ("Type" . "git")
-		  ("URL" . "https://github.com/poly-repo/neo-extensions.git")
-		  ("Path" . "extensions/uno/news"))))
-      (insert
-       (propertize "❓"
-		   'help-echo (neo/make-hover-callback info)
-		   'mouse-face 'default ; 'highlight
-		   'keymap neo/info-icon-map)))
-
+    ;; (let ((info '(("Publisher" . "neo")
+    ;; 		  ("Type" . "git")
+    ;; 		  ("URL" . "https://github.com/poly-repo/neo-extensions.git")
+    ;; 		  ("Path" . "extensions/uno/news"))))
+    ;;   (insert
+    ;;    (propertize "❓"
+    ;; 		   'help-echo (neo/make-hover-callback info)
+    ;; 		   'mouse-face 'default ; 'highlight
+    ;; 		   'keymap neo/info-icon-map)))
     
     (insert (propertize (or (neo/extension-title ext) "Unnamed")
                         'face '(:weight bold :height 1.2)))
