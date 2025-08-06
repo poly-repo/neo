@@ -179,4 +179,40 @@ Returns the absolute expanded path to DIR."
   (let ((dir (neo/path-join "~/.cache" "neo" emacs-version package)))
     (neo/ensure-directory-exists dir)))
 
+(require 'color)
+
+(defun neo/theme-dark-p ()
+  "Return t if current theme has a dark background, nil if it's light."
+  (let* ((bg (face-attribute 'default :background nil))
+         (rgb (color-name-to-rgb bg)))
+    (when rgb
+      ;; Calculate relative luminance (per W3C WCAG 2.0)
+      ;; Formula: 0.2126*R + 0.7152*G + 0.0722*B
+      (let ((luminance (apply #'+
+                              (cl-mapcar (lambda (channel weight)
+                                           (* (expt channel 2.2) weight))
+                                         rgb '(0.2126 0.7152 0.0722)))))
+        (< luminance 0.5)))))
+
+(require 'color)
+
+(defun neo/compute-contrasting-colors ()
+  "Return a cons cell (NEW-BG . NEW-FG) that contrasts with the current theme background."
+  (let* ((bg (face-attribute 'default :background nil))
+         (bg-rgb (color-name-to-rgb bg))
+         (luminance (when bg-rgb
+                      (apply #'+
+                             (cl-mapcar (lambda (channel weight)
+                                          (* (expt channel 2.2) weight))
+                                        bg-rgb '(0.2126 0.7152 0.0722)))))
+         ;; Choose a contrasting background color
+         (new-bg (if (and luminance (< luminance 0.5))
+                     "#f5f5f5"  ; light gray
+                   "#202020")) ; dark gray
+         ;; Choose a foreground based on new background
+         (new-fg (if (string= new-bg "#f5f5f5")
+                     "#202020"  ; dark text
+                   "#f5f5f5"))) ; light text
+    (cons new-bg new-fg)))
+
 (provide 'neo-utils)

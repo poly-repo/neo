@@ -82,4 +82,18 @@
 
 
 
+;; Load early frame settings if available
+(let ((init-file "~/.cache/neo/initial-frame-properties.el"))
+  (when (file-readable-p init-file)
+    (load-file init-file)))
 
+;; ;; early-init.el
+;; (setq default-frame-alist
+;;       '((width . 240)
+;;         (height . 60)
+;;         (font . "Ubuntu Mono-13")
+;;         (internal-border-width . 0)
+;;         (undecorated . t)))
+
+;; ;; Also pre-define theme-like defaults
+;; (set-face-attribute 'default nil :background "#1e1e1e" :foreground "#cccccc")

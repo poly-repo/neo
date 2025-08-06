@@ -2,6 +2,7 @@
 
 (require 'map)
 
+;; TDOD: reseolve the mess w/ :ensure-system-packages
 
 ;;; NOTE this first definition wins so that we don't have to remember
 ;;; to modify the installer and we can simply copy and paste it.
@@ -128,9 +129,20 @@ Uses `eq` for key comparison, like `assq-delete-all`."
   (assq-delete-all key alist))
 
 
+;; :hook
+;; FOO -> (FOO . <package-name>-mode)
+;; (FOO BAR) -> ((FOO BAR) . <package-name>-mode)
+;; add a :depth and a :local, but with all the magic above is
+;; difficult
+;; TODO: check how :hook implements support for autoloads and do it as
+;; we need to maintain equivalence even with :depth and :local
+(defun neo--normalize-hooks (alist)
+  alist)
+
 (defun neo--normalize-use-package-arguments (args)
   (let* ((args-alist (neo--sectioned-list->alist args))
 	 (args-alist (neo--alist-remove-key :doc args-alist))
+	 (args-alist (neo--normalize-hooks args-alist))
 	 (args (neo--alist->sectioned-list args-alist)))
     args))
 
@@ -178,6 +190,7 @@ If USER and EXTENSION are provided, only replays that entry."
 
 (defun neo--elpaca-bury-logs-if-clean ()
   "Bury *elpaca-logs* buffer unless it contains 'error' or warnings."
+  (message "Considering whether to bury elpaca-logs")
   (let ((buf (get-buffer "*elpaca-logs*")))
     (when (and buf (buffer-live-p buf))
       (with-current-buffer buf
@@ -194,7 +207,7 @@ If USER and EXTENSION are provided, only replays that entry."
 ;;; ⛔ Warning (emacs): Duplicate item queued: ace-window
 ;;; ⛔ Warning (emacs): Duplicate item queued: magit
 ;;; ⛔ Warning (emacs): Duplicate item queued: org-roam
-;(setq warning-minimum-level :error)
+(setq warning-minimum-level :error)
 
 ;; Block until current queue processed.
 (elpaca-wait)

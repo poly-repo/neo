@@ -162,6 +162,38 @@
       (put-text-property start end 'neo-extension ext)
       (cons start end))))
 
+(defface neo/divider-face
+  '((t :overline unspecified
+       :foreground unspecified
+       :background unspecified))
+  "Face for UI dividers.")
+
+(defun neo/update-divider-face ()
+  "Update `neo/divider-face` colors to match the current theme."
+  (let ((fg (face-foreground 'default nil t))
+        (bg (face-background 'default nil t)))
+    (set-face-attribute 'neo/divider-face nil
+                        :overline fg
+                        :foreground bg
+                        :background bg)))
+
+(neo/update-divider-face)
+(add-hook 'neo/after-theme-load-hook #'neo/update-divider-face)
+
+;; (defun neo/insert-thin-divider (&optional color)
+;;   "Insert a thin horizontal divider using underline, aligned to window width.
+;; If COLOR is nil, use the theme's default foreground color."
+;;   (let* ((line-color (or color (face-foreground 'default nil t)))
+;;          (bg-color   (face-background 'default nil t)))
+;; ;    (insert "\n")
+;;     (insert
+;;      (propertize " "
+;;                  'display '(space :align-to right)
+;;                  'face `(:overline ,line-color
+;;                          :foreground ,bg-color
+;;                          :background ,bg-color)))
+;;     (insert "\n")))
+
 (defun neo/insert-thin-divider (&optional color)
   "Insert a thin horizontal divider using underline, aligned to window width.
 If COLOR is nil, use the theme's default foreground color."
@@ -171,9 +203,7 @@ If COLOR is nil, use the theme's default foreground color."
     (insert
      (propertize " "
                  'display '(space :align-to right)
-                 'face `(:overline ,line-color
-                         :foreground ,bg-color
-                         :background ,bg-color)))
+                 'face 'neo/divider-face))
     (insert "\n")))
 
 (defun neo/show-extension-info (info-list)
