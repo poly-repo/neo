@@ -14,13 +14,13 @@
 
 - name: Define target dir
   set_fact:
-    emacs_target_dir: "/usr/local/emacs/{{ 'emacs-' + emacs_version + ('-native'if native_compilation else '')}}"
+    emacs_target_dir: "{{ ansible_user_dir }}/.local/emacs-{{emacs_version | string}}{{('-native' if native_compilation else '')}}"
 
 - name: Set Emacs base url (release candidates)
   set_fact:
     emacs_base_url: "https://alpha.gnu.org/gnu/emacs/pretest"
     emacs_top_dir: "emacs-{{ emacs_version | regex_replace('^(.*)(-rc[0-9])$', '\\1') }}"
-  when: emacs_version | regex_search("^(.*)(-rc[0-9])$")
+  when: (emacs_version | regex_search("^(.*)(-rc[0-9])$")) is not none
 
 - name: Set Emacs base url (official release)
   set_fact:

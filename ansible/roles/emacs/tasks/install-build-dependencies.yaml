@@ -38,7 +38,7 @@
       - libjpeg-dev
       - liblockfile-dev
       - libm17n-dev
-      - libmagick++-6.q16-dev
+      - libmagick++-dev
       - libmagickcore-dev
       - libmagickwand-dev
       - libncurses5-dev
