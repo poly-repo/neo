@@ -47,4 +47,4 @@ it only returns a string suitable to be written by a caller (e.g., your
 			:remote "https://github.com/poly-repo/neo-extensions/releases/download/latest/neo-extensions.el"))
 (neo/ensure neo/extensions)
 
-
+(provide 'neo-config)
