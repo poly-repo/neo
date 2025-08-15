@@ -360,11 +360,12 @@ Args:
 ;; TODO only fetch if older than X hours unless FORCE is used
 (defun neo/fetch-extensions ()
   "Download and cache the latest neo-extensions.el if the SHA has changed.
-Keeps a copy in ~/.cache/neo/extensions/."
+Keeps a copy in ~/.cache/neo/"
   (let* ((base-url "https://github.com/poly-repo/neo-extensions/releases/download/latest/")
          (filename "neo-extensions.el")
          (sha-filename "neo-extensions.sha256")
-         (cache-dir (expand-file-name "~/.cache/neo/extensions/"))
+	 (instance (neo/get-emacs-instance-name))
+         (cache-dir (expand-file-name (format "~/.cache/%s/" instance)))
          (file-path (expand-file-name filename cache-dir))
          (sha-path (expand-file-name sha-filename cache-dir))
          (sha-latest-path (expand-file-name (concat sha-filename ".latest") cache-dir))
@@ -395,8 +396,14 @@ Keeps a copy in ~/.cache/neo/extensions/."
 
     file-path))
 
+(defun neo/fetch-extensions-config ()
+  (let* ((filename (expand-file-name (format "~/.cache/%s/extensions/config.el"))))
+    (if (not (file-exists-p filename))
+	(message "Launch Welcome")	;welcome should be able to handle existing files as well
+      (load filename))))
+
 (neo/fetch-extensions)
-(setq extensions (neo--load-extension-manifests "~/.cache/neo/extensions/neo-extensions.el"))
+(setq extensions (neo--load-extension-manifests (format "~/.cache/%s/extensions/neo-extensions.el" (neo/get-emacs-instance-name))))
 (neo--dump-sxtension-names-and-descriptions extensions)
 ;;; Actually load the extensions
 (neo/load-extensions extensions)
@@ -405,7 +412,7 @@ Keeps a copy in ~/.cache/neo/extensions/."
 (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
 
 (require 'neo-packages)
-(neo/replay-extension-packages)
+;(neo/replay-extension-packages)
 
 (provide 'neo-extensions)
 
