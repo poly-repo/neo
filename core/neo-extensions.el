@@ -397,13 +397,13 @@ Keeps a copy in ~/.cache/neo/"
     file-path))
 
 (defun neo/fetch-extensions-config ()
-  (let* ((filename (expand-file-name (format "~/.cache/%s/extensions/config.el"))))
+  (let* ((filename (expand-file-name (format "~/.cache/%s/config.el"))))
     (if (not (file-exists-p filename))
 	(message "Launch Welcome")	;welcome should be able to handle existing files as well
       (load filename))))
 
 (neo/fetch-extensions)
-(setq extensions (neo--load-extension-manifests (format "~/.cache/%s/extensions/neo-extensions.el" (neo/get-emacs-instance-name))))
+(setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
 (neo--dump-sxtension-names-and-descriptions extensions)
 ;;; Actually load the extensions
 (neo/load-extensions extensions)
