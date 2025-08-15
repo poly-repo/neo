@@ -2,7 +2,7 @@
 
 (require 'map)
 
-;; TDOD: reseolve the mess w/ :ensure-system-packages
+;; TODO: resolve the mess w/ :ensure-system-packages
 
 ;;; NOTE this first definition wins so that we don't have to remember
 ;;; to modify the installer and we can simply copy and paste it.
@@ -146,18 +146,28 @@ Uses `eq` for key comparison, like `assq-delete-all`."
 	 (args (neo--alist->sectioned-list args-alist)))
     args))
 
+(defun neo--author-name (file)
+  "Return the name of the directory containing FILE."
+  (let ((file (or load-file-name buffer-file-name)))
+    (if file
+	(file-name-nondirectory
+	 (directory-file-name
+	  (file-name-directory file)))
+       "unknown")))
+
 (defmacro neo/use-package (name &rest args)
   "Augment `use-package` with Neo-specific tracking and filtering.
 
 Stores the raw `use-package` form in `neo--enabled-packages`
 indexed by (user . extension-base-name)."
   (declare (indent defun))
+  (message (format "Definition of package %s [%s:%s]" name (neo-author-name) (file-name-base (or load-file-name buffer-file-name "unknown"))))
   (let* ((ensure (if (string= name "emacs") (list :ensure nil) '()))
 ;         (args (append (neo/filter-package-args args) ensure))
          (args (append (neo--normalize-use-package-arguments args) ensure))
          (file (or load-file-name buffer-file-name "unknown"))
          (user (user-login-name))
-         (extension (file-name-base file))
+         (extension (file-name-base file)) 
          (key (cons user extension))
          (real-form `(use-package ,name ,@args))
          (existing (alist-get key neo--enabled-packages nil nil #'equal)))
@@ -165,6 +175,8 @@ indexed by (user . extension-base-name)."
     `(setq neo--enabled-packages
            (cons (cons ',key (cons ',real-form ',existing))
                  (assq-delete-all ',key neo--enabled-packages)))))
+
+(require 'pp)
 
 (defun neo/replay-extension-packages (&optional user extension)
   "Replay all stored `use-package` expansions.
@@ -178,6 +190,9 @@ If USER and EXTENSION are provided, only replays that entry."
                 (and (equal user (car key))
                      (equal extension (cdr key))))
         (dolist (form forms)
+	  (message "[%s]" (cadr form)))
+        (dolist (form forms)
+	  (message "\n---\n%s" (pp-to-string form))
           (eval form))))))
 
 
