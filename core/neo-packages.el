@@ -146,7 +146,7 @@ Uses `eq` for key comparison, like `assq-delete-all`."
 	 (args (neo--alist->sectioned-list args-alist)))
     args))
 
-(defun neo--author-name (file)
+(defun neo--author-name ()
   "Return the name of the directory containing FILE."
   (let ((file (or load-file-name buffer-file-name)))
     (if file
