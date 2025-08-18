@@ -412,7 +412,7 @@ Keeps a copy in ~/.cache/neo/"
 (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
 
 (require 'neo-packages)
-;(neo/replay-extension-packages)
+(neo/replay-extension-packages)
 
 (provide 'neo-extensions)
 

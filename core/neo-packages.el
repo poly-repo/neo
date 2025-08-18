@@ -161,7 +161,7 @@ Uses `eq` for key comparison, like `assq-delete-all`."
 Stores the raw `use-package` form in `neo--enabled-packages`
 indexed by (user . extension-base-name)."
   (declare (indent defun))
-  (message (format "Definition of package %s [%s:%s]" name (neo-author-name) (file-name-base (or load-file-name buffer-file-name "unknown"))))
+  (message (format "Definition of package %s [%s:%s]" name (neo--author-name) (file-name-base (or load-file-name buffer-file-name "unknown"))))
   (let* ((ensure (if (string= name "emacs") (list :ensure nil) '()))
 ;         (args (append (neo/filter-package-args args) ensure))
          (args (append (neo--normalize-use-package-arguments args) ensure))

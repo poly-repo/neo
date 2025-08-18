@@ -1,5 +1,5 @@
 (require 'cl-lib)
-(require 'neo-asset)
+;(require 'neo-asset)
 
 (defun neo/save-initial-frame-properties (&optional _a)
   "Return an Emacs Lisp snippet that sets default frame properties and the
@@ -36,15 +36,16 @@ it only returns a string suitable to be written by a caller (e.g., your
       (insert ")\n")
       (buffer-string))))
 
-(defvar neo/initial-frame-properties (neo/make-asset
-				  :name "initial-frame-properties"
-				  :extension ".el"
-				  :remote #'neo/save-initial-frame-properties))
-(neo/ensure neo/initial-frame-properties)
+;;; TODO not working neo/asset not a class
+;; (defvar neo/initial-frame-properties (neo/make-asset
+;; 				  :name "initial-frame-properties"
+;; 				  :extension ".el"
+;; 				  :remote #'neo/save-initial-frame-properties))
+;; (neo/ensure neo/initial-frame-properties)
 
-(defvar neo/extensions (neo/make-asset
-			:name "neo-extensions"
-			:remote "https://github.com/poly-repo/neo-extensions/releases/download/latest/neo-extensions.el"))
-(neo/ensure neo/extensions)
+;; (defvar neo/extensions (neo/make-asset
+;; 			:name "neo-extensions"
+;; 			:remote "https://github.com/poly-repo/neo-extensions/releases/download/latest/neo-extensions.el"))
+;; (neo/ensure neo/extensions)
 
 (provide 'neo-config)
