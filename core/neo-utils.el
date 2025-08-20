@@ -219,18 +219,23 @@ Returns the absolute expanded path to DIR."
 
 ;; TODO doesn't really belong here, but should be available when
 ;; programming extensions are loaded. Fix when dependencies do work.
-(defmacro neo/eglot-set-server (modes server-command)
-    "Set eglot server for MODES to SERVER-COMMAND.
-MODES can be a single mode symbol or a list of mode symbols.
-SERVER-COMMAND should be a list representing the CLI invocation."
+(defun neo/eglot-set-server (modes server-command)
+  "Install SERVER-COMMAND for MODES in `eglot-server-programs`.
+
+MODES is a symbol or a list of symbols.
+SERVER-COMMAND is a list like (\"pyright-langserver\" \"--stdio\")."
+  (let ((mode-list (if (listp modes) modes (list modes))))
     (with-eval-after-load 'eglot
-      (let ((mode-list (if (listp modes) modes (list modes))))
-	`(setq eglot-server-programs
-               (append (mapcar (lambda (mode)
-				 (cons mode ,server-command))
-                               ',mode-list)
-                       (cl-remove-if (lambda (x)
-                                       (memq (car-safe x) ',mode-list))
-                                     eglot-server-programs))))))
+      ;; Remove any existing entries that mention these modes
+      (setq eglot-server-programs
+            (cl-remove-if
+             (lambda (cell)
+               (let ((k (car-safe cell)))
+                 (cond
+                  ((symbolp k) (memq k mode-list))
+                  ((and (consp k) (cl-intersection k mode-list))))))
+             eglot-server-programs))
+      ;; Add a single grouped entry so either mode hits this server
+      (push (cons mode-list server-command) eglot-server-programs))))
 
 (provide 'neo-utils)
