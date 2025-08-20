@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t; -*-
 (require 'cl-lib)
 
 (defmacro neo/write-early-init-config! (&rest vars)
