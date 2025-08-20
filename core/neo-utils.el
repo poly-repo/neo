@@ -1,3 +1,5 @@
+(require 'cl-lib)
+
 (defmacro neo/write-early-init-config! (&rest vars)
   "Write current values of VARS to the early-init config file for this Emacs instance.
 The file is stored in ~/.config/neo/INSTANCE-NAME-early-init-config.el."
@@ -214,5 +216,21 @@ Returns the absolute expanded path to DIR."
                      "#202020"  ; dark text
                    "#f5f5f5"))) ; light text
     (cons new-bg new-fg)))
+
+;; TODO doesn't really belong here, but should be available when
+;; programming extensions are loaded. Fix when dependencies do work.
+(defmacro neo/eglot-set-server (modes server-command)
+    "Set eglot server for MODES to SERVER-COMMAND.
+MODES can be a single mode symbol or a list of mode symbols.
+SERVER-COMMAND should be a list representing the CLI invocation."
+    (with-eval-after-load 'eglot
+      (let ((mode-list (if (listp modes) modes (list modes))))
+	`(setq eglot-server-programs
+               (append (mapcar (lambda (mode)
+				 (cons mode ,server-command))
+                               ',mode-list)
+                       (cl-remove-if (lambda (x)
+                                       (memq (car-safe x) ',mode-list))
+                                     eglot-server-programs))))))
 
 (provide 'neo-utils)
