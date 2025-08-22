@@ -1,10 +1,12 @@
+;; -*- lexical-binding: t; -*-
+
 (require 'cl-lib)
 (require 'cl-generic)
 
 (defgroup neo-extensions nil
   "Settings for Neo Extensions system."
   :group 'neo
-  :prefix "neo/extensions-")
+  :prefix "Neo/extensions-")
 
 (cl-defstruct neo/repository
   type
@@ -28,7 +30,7 @@
   summary-overlay  ;; used in summary view only
   emblem-img       ;; derived from emblem
   emblem-hilighted-img ;; derived from emblem applying a solid
-  ;; background matching hilight. Changes with theme setting, need to
+  ;; background matching highlight. Changes with theme setting, need to
   ;; register a hook for that.
 )
 
@@ -253,7 +255,7 @@ Labels are bolded, values are colored."
   "Hash table mapping publisher/name to `neo/extension` instances.")
 
 ;;; This is for debugging
-(defun neo--dump-sxtension-names-and-descriptions (extensions)
+(defun neo--dump-extension-names-and-descriptions (extensions)
   "Display names and descriptions from `neo--extensions` in a temporary buffer."
   (interactive)
   (let ((buf (generate-new-buffer "*Neo Extensions Summary*")))
@@ -345,13 +347,41 @@ Args:
             (string< (neo/extension-name a)
                      (neo/extension-name b))))))
 
+;; (defun neo--load-extension (ext)
+;;   (let* ((publisher (neo/extension-publisher ext))
+;; 	 (name (neo--normalize-name (neo/extension-name ext)))
+;; 	 (base (expand-file-name "extensions/" user-emacs-directory))
+;;          (file (expand-file-name (format "%s/%s/%s.el" publisher name name) base)))
+;;     (message (format "Loading %s/%s from %s" publisher name file))
+;;     (load file)))
+
 (defun neo--load-extension (ext)
+  "Load the extension file for EXT.
+Logs errors to *Messages* but never signals.  Returns non-nil on success."
   (let* ((publisher (neo/extension-publisher ext))
-	 (name (neo--normalize-name (neo/extension-name ext)))
-	 (base (expand-file-name "extensions/" user-emacs-directory))
-         (file (expand-file-name (format "%s/%s/%s.el" publisher name name) base)))
-    (message (format "Loading %s/%s from %s" publisher name file))
-    (load file)))
+         (name      (neo--normalize-name (neo/extension-name ext)))
+         (base      (expand-file-name "extensions/" user-emacs-directory))
+         (file      (expand-file-name (format "%s/%s/%s.el" publisher name name) base)))
+    (message "[neo] Loading %s/%s from %s" publisher name file)
+    (let ((res (condition-case err
+                   ;; NOERROR=t prevents file-not-found from signaling.
+                   ;; NOMESSAGE='nomessage keeps `load` quiet; we log ourselves.
+                   (load file t 'nomessage 'nosuffix)
+                 (error
+                  (message "[neo] Error while loading %s: %s"
+                           file (error-message-string err))
+                  :error))))
+      (cond
+       ;; evaluation error caught above
+       ((eq res :error) nil)
+       ;; file not found or unreadable (load returned nil with NOERROR=t)
+       ((null res)
+        (message "[neo] Extension file not found: %s" file)
+        nil)
+       ;; success (load returns non-nil)
+       (t
+        (message "[neo] Loaded %s" file)
+        t)))))
 
 (defun neo/load-extensions (extensions)
   (let ((extensions (neo--sorted-extensions-by-name  extensions)))
@@ -404,7 +434,7 @@ Keeps a copy in ~/.cache/neo/"
 
 (neo/fetch-extensions)
 (setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
-(neo--dump-sxtension-names-and-descriptions extensions)
+(neo--dump-extension-names-and-descriptions extensions)
 ;;; Actually load the extensions
 (neo/load-extensions extensions)
 
