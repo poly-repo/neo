@@ -443,8 +443,8 @@ Keeps a copy in ~/.cache/neo/"
 ;; (require 'neo-extensions-summary)
 ;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
 
-;; (require 'neo-packages)
-;; (neo/replay-extension-packages)
+(require 'neo-packages)
+(neo/replay-extension-packages "neo" "questionable-defaults")
 
 (provide 'neo-extensions)
 

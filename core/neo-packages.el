@@ -212,7 +212,6 @@ If USER and EXTENSION are provided, only replays that entry."
 
 (defun neo--elpaca-bury-logs-if-clean ()
   "Bury *elpaca-logs* buffer unless it contains 'error' or warnings."
-  (message "Considering whether to bury elpaca-logs")
   (let ((buf (get-buffer "*elpaca-logs*")))
     (when (and buf (buffer-live-p buf))
       (with-current-buffer buf
