@@ -151,6 +151,8 @@ echo "Copybara"
 bazel run devex/editors/emacs:neo
 bazel run devex/editors/emacs/extensions:neo-extensions
 
+(cd ~/neo; git pull)
+
 echo "Done. Committed ${CNT} file(s) from allowed roots: ${ROOT_LABELS}."
 if [[ ${#OUTSIDE_FILES[@]} -gt 0 ]]; then
   echo "Reminder: changes outside allowed roots were left uncommitted."
