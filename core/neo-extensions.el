@@ -445,6 +445,7 @@ Keeps a copy in ~/.cache/neo/"
 
 (require 'neo-packages)
 (neo/replay-extension-packages "neo" "questionable-defaults")
+(neo/replay-extension-packages "neo" "ui")
 
 (provide 'neo-extensions)
 
