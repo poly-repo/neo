@@ -166,7 +166,7 @@ indexed by (user . extension-base-name)."
 ;         (args (append (neo/filter-package-args args) ensure))
          (args (append (neo--normalize-use-package-arguments args) ensure))
          (file (or load-file-name buffer-file-name "unknown"))
-         (user (user-login-name))
+         (user (neo--author-name))
          (extension (file-name-base file)) 
          (key (cons user extension))
          (real-form `(use-package ,name ,@args))
