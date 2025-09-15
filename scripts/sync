@@ -149,7 +149,7 @@ git push origin "HEAD:${BRANCH}"
 
 echo "Copybara"
 bazel run devex/editors/emacs:neo
-bazel run devex/editors/emacs:neo-extensions
+bazel run devex/editors/emacs/extensions:neo-extensions
 
 echo "Done. Committed ${CNT} file(s) from allowed roots: ${ROOT_LABELS}."
 if [[ ${#OUTSIDE_FILES[@]} -gt 0 ]]; then
