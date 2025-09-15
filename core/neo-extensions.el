@@ -437,8 +437,8 @@ Keeps a copy in ~/.cache/neo/"
 
 (neo--dump-extension-names-and-descriptions extensions)
 
-;; ;;; Actually load the extensions
-;; (neo/load-extensions extensions)
+;;; Actually load the extensions
+(neo/load-extensions extensions)
 
 ;; (require 'neo-extensions-summary)
 ;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
