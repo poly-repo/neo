@@ -193,6 +193,7 @@ If USER and EXTENSION are provided, only replays that entry."
   (dolist (entry neo--enabled-packages)
     (let ((key (car entry))
           (forms (cdr entry)))
+      (message "Considering extension %s:%s" (car key) (cdr key))
       (when (or (not user)
                 (and (equal user (car key))
                      (equal extension (cdr key))))
