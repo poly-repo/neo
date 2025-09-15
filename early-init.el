@@ -8,6 +8,8 @@
 ;;; Code:
 
 (setq package-enable-at-startup nil)
+(setq package-activated-list nil)
+
 (setq native-comp-async-report-warnings-errors nil)
 
 ;;; TODO: I don't seem to be able to change initial-frame-alist (for the most part we use .Xdefaults, so not a big deal)

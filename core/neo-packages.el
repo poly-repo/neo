@@ -176,6 +176,13 @@ indexed by (user . extension-base-name)."
            (cons (cons ',key (cons ',real-form ',existing))
                  (assq-delete-all ',key neo--enabled-packages)))))
 
+(setopt package-archives
+        '(("gnu" . "https://elpa.gnu.org/packages/")
+          ("nongnu" . "https://elpa.nongnu.org/nongnu/")
+          ("melpa" . "https://melpa.org/packages/")))
+
+(setopt elpaca-ui-row-limit nil)	; no limits
+
 (require 'pp)
 
 (defun neo/replay-extension-packages (&optional user extension)
