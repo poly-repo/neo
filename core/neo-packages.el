@@ -146,6 +146,16 @@ Uses `eq` for key comparison, like `assq-delete-all`."
 	 (args (neo--alist->sectioned-list args-alist)))
     args))
 
+(defun neo--publisher-name ()
+  "Return the name of the directory two levels above PATH, or nil if none.
+That corresponds to the publisher of an extension."
+  (let* ((file (or load-file-name buffer-file-name))
+	 (dir (directory-file-name (or (file-name-directory file) "")))
+         (parent (file-name-directory dir)))
+    (when parent
+      (let ((grand (file-name-nondirectory (directory-file-name parent))))
+        (unless (string= grand "") grand)))))
+
 (defun neo--author-name ()
   "Return the name of the directory containing FILE."
   (let ((file (or load-file-name buffer-file-name)))
@@ -166,7 +176,7 @@ indexed by (user . extension-base-name)."
 ;         (args (append (neo/filter-package-args args) ensure))
          (args (append (neo--normalize-use-package-arguments args) ensure))
          (file (or load-file-name buffer-file-name "unknown"))
-         (user (neo--author-name))
+         (user (neo--publisher-name))
          (extension (file-name-base file)) 
          (key (cons user extension))
          (real-form `(use-package ,name ,@args))
