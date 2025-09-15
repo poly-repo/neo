@@ -12,41 +12,6 @@
 
 (setq native-comp-async-report-warnings-errors nil)
 
-;;; TODO: I don't seem to be able to change initial-frame-alist (for the most part we use .Xdefaults, so not a big deal)
-;;; maybe it is lexical scoping at play
-;; (defun neo/default-frame-parameters (params)
-;;   "Add each parameter in PARAMETERS to `default-frame-alist`."
-;;   (dolist (param params)
-;;     (push param initial-frame-alist)
-;;     (push param default-frame-alist)))
-  
-;; ;; set/inhibit UI config to cure startup flickering
-;; ;;; TODO: many of these go in init.el
-;; ;;; TODO: cannot get rid of the message on how to get information about the GNU system
-;; (setq
-;;  frame-inhibit-implied-resize t
-;;  frame-resize-pixelwise t
-;;  inhibit-splash-screen t
-;;  inhibit-startup-buffer-menu t
-;;  inhibit-startup-echo-area-message user-login-name
-;;  inhibit-startup-message t
-;;  inhibit-startup-screen t
-;;  menu-bar-mode nil
-;;  ring-bell-function 'ignore
-;;  scroll-bar-mode nil
-;;  tool-bar-mode nil
-;;  use-dialog-box t
-;;  use-file-dialog nil
-;;  use-short-answers t
-;;  )
-
-;; (set-scroll-bar-mode nil)
-;; (tooltip-mode -1)
-
-;; (neo/default-frame-parameters '(
-;;                                 (width . 800)
-;;;                                 (height . 900)))
-
 (add-to-list 'load-path
              (expand-file-name "core" (file-name-directory (or load-file-name buffer-file-name))))
 (require 'early-init-utils)
@@ -89,13 +54,3 @@
   (when (file-readable-p init-file)
     (load-file init-file)))
 
-;; ;; early-init.el
-;; (setq default-frame-alist
-;;       '((width . 240)
-;;         (height . 60)
-;;         (font . "Ubuntu Mono-13")
-;;         (internal-border-width . 0)
-;;         (undecorated . t)))
-
-;; ;; Also pre-define theme-like defaults
-;; (set-face-attribute 'default nil :background "#1e1e1e" :foreground "#cccccc")
