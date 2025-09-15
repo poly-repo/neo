@@ -433,9 +433,10 @@ Keeps a copy in ~/.cache/neo/"
       (load filename))))
 
 (neo/fetch-extensions)
+(setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
 
-;; (setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
-;; (neo--dump-extension-names-and-descriptions extensions)
+(neo--dump-extension-names-and-descriptions extensions)
+
 ;; ;;; Actually load the extensions
 ;; (neo/load-extensions extensions)
 
