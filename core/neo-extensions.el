@@ -416,7 +416,7 @@ Keeps a copy in ~/.cache/neo/"
                                              (insert-file-contents sha-path)
                                              (buffer-string)))))))
       (when update-needed
-        (message "Updating neo-extensions.el...")
+        (message "Updating %s..." file-path)
         (url-copy-file file-url file-path t)
         (rename-file sha-latest-path sha-path t)
         (message "neo-extensions.el updated."))
@@ -433,16 +433,17 @@ Keeps a copy in ~/.cache/neo/"
       (load filename))))
 
 (neo/fetch-extensions)
-(setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
-(neo--dump-extension-names-and-descriptions extensions)
-;;; Actually load the extensions
-(neo/load-extensions extensions)
 
-(require 'neo-extensions-summary)
-(neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
+;; (setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
+;; (neo--dump-extension-names-and-descriptions extensions)
+;; ;;; Actually load the extensions
+;; (neo/load-extensions extensions)
 
-(require 'neo-packages)
-(neo/replay-extension-packages)
+;; (require 'neo-extensions-summary)
+;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
+
+;; (require 'neo-packages)
+;; (neo/replay-extension-packages)
 
 (provide 'neo-extensions)
 
