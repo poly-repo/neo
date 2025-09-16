@@ -444,6 +444,7 @@ Keeps a copy in ~/.cache/neo/"
 ;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
 
 (require 'neo-packages)
+(neo/replay-extension-packages "neo" "session")
 (neo/replay-extension-packages "neo" "questionable-defaults")
 (neo/replay-extension-packages "neo" "ui")
 
