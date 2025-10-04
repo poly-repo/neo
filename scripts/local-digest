@@ -1,0 +1,27 @@
+#!/bin/bash
+# Ehi, Emacs this is -*- shell-script -*-
+
+set -euo pipefail
+
+REQUIRED_REMOTE="poly-repo.github.com:poly-repo/uno.git"
+
+# Check if we're inside a git repo
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "❌ Not inside a git repository." >&2
+  exit 1
+fi
+
+# Check if the remote exists and matches
+REMOTE_URL=$(git remote get-url origin 2>/dev/null || true)
+if [[ "$REMOTE_URL" != "$REQUIRED_REMOTE" ]]; then
+  echo "❌ This repo must have 'origin' remote set to: $REQUIRED_REMOTE" >&2
+  echo "   Current remote: ${REMOTE_URL:-<none>}" >&2
+  exit 1
+fi
+
+cd /home/mav/Projects/uno/devex/editors/emacs/extensions
+
+BASE_NAME="$HOME/.cache/emacs/neo-extensions"
+VARS="(setq output-file \"$BASE_NAME.el\" digest-file \"$BASE_NAME.sha256\")"
+echo "$VARS"
+emacs --batch --eval "$VARS" -l build/extensions.el
