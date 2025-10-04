@@ -357,31 +357,34 @@ Args:
 
 (defun neo--load-extension (ext)
   "Load the extension file for EXT.
-Logs errors to *Messages* but never signals.  Returns non-nil on success."
+Logs errors to *Messages* but never signals. Returns non-nil on success.
+Temporarily adds the file's directory to `load-path` so `require` works."
   (let* ((publisher (neo/extension-publisher ext))
          (name      (neo--normalize-name (neo/extension-name ext)))
          (base      (expand-file-name "extensions/" user-emacs-directory))
-         (file      (expand-file-name (format "%s/%s/%s.el" publisher name name) base)))
+         (file-dir  (expand-file-name (format "%s/%s" publisher name) base))
+         (file      (expand-file-name (format "%s.el" name) file-dir)))
     (message "[neo] Loading %s/%s from %s" publisher name file)
-    (let ((res (condition-case err
-                   ;; NOERROR=t prevents file-not-found from signaling.
-                   ;; NOMESSAGE='nomessage keeps `load` quiet; we log ourselves.
-                   (load file t 'nomessage 'nosuffix)
-                 (error
-                  (message "[neo] Error while loading %s: %s"
-                           file (error-message-string err))
-                  :error))))
+    (let ((res
+           (condition-case err
+               ;; Temporarily add file-dir to load-path
+               (let ((load-path (cons file-dir load-path)))
+                 ;; NOERROR=t prevents file-not-found from signaling.
+                 ;; NOMESSAGE='nomessage keeps `load` quiet; we log ourselves.
+                 (load file t 'nomessage 'nosuffix))
+             (error
+              (message "[neo] Error while loading %s: %s"
+                       file (error-message-string err))
+              :error))))
       (cond
-       ;; evaluation error caught above
        ((eq res :error) nil)
-       ;; file not found or unreadable (load returned nil with NOERROR=t)
        ((null res)
         (message "[neo] Extension file not found: %s" file)
         nil)
-       ;; success (load returns non-nil)
        (t
         (message "[neo] Loaded %s" file)
         t)))))
+
 
 (defun neo/load-extensions (extensions)
   (let ((extensions (neo--sorted-extensions-by-name  extensions)))
@@ -448,6 +451,7 @@ Keeps a copy in ~/.cache/neo/"
 (neo/replay-extension-packages "neo" "ui")
 (neo/replay-extension-packages "neo" "session")
 (neo/replay-extension-packages "neo" "org")
+(neo/replay-extension-packages "neo" "terminal")
 
 (provide 'neo-extensions)
 
