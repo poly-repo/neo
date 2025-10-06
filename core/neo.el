@@ -12,4 +12,8 @@
 
 ;(neo--require 'neo-extensions)
 
+;; Instantiate the global `neo' object.
+;; This should be done after all the methods are defined.
+(setq neo (make-neo))
+
 (provide 'neo)
