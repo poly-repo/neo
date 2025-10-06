@@ -18,5 +18,6 @@
 (neo--require 'neo-packages)
 
 (neo--require 'neo-extensions)
+(neo--require 'neo-extensions-fetch)
 
 (provide 'neo)
