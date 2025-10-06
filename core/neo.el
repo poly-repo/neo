@@ -8,7 +8,7 @@
 (neo--require 'neo-packages)
 
 (neo--require 'neo-struct)
-(neo--require 'neo-extensions-fetch)
+;(neo--require 'neo-extensions-fetch)
 
 ;(neo--require 'neo-extensions)
 
