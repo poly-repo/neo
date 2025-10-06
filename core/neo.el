@@ -12,9 +12,14 @@
 
 ;(neo--require 'neo-extensions)
 
+(defun neo-new ()
+  "Create a new `neo' instance and fetch extensions."
+  (let ((instance (make-neo)))
+    (neo-fetch-extensions instance)
+    instance))
+
 ;; Instantiate the global `neo' object.
 ;; This should be done after all the methods are defined.
-(setq neo (make-neo))
-(neo-fetch-extensions neo)
+(setq neo (neo-new))
 
 (provide 'neo)
