@@ -16,6 +16,7 @@
              (expand-file-name "core" (file-name-directory (or load-file-name buffer-file-name))))
 (require 'early-init-utils)
 
+(setq neo/cache-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.cache")))
 
 (startup-redirect-eln-cache
  (expand-file-name
@@ -23,12 +24,12 @@
           (neo/get-emacs-instance-name)
           emacs-major-version
           emacs-minor-version)
-  (expand-file-name "neo" (or (getenv "XDG_CONFIG_HOME") "~/.cache"))))
+  neo/cache-directory))
 
 (let* ((instance-name (neo/get-emacs-instance-name))
        (early-config (expand-file-name
                       (format "%s-early-init-config.el" instance-name)
-                      (expand-file-name "neo" (or (getenv "XDG_CONFIG_HOME") "~/.config")))))
+		      neo/cache-directory)))
   (message (format "instance name: %s" instance-name))
   (message (format "config: %s [%s]" early-config (file-readable-p early-config)))
   (when (file-readable-p early-config)

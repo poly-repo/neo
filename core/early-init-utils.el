@@ -22,6 +22,6 @@ Reads from /proc/self/cmdline if needed (Linux-only)."
                    (when index
                      (nth (1+ index) args)))))
              ;; Fallback
-             "emacs"))))
+             "neo"))))
 
 (provide 'early-init-utils)
