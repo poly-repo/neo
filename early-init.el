@@ -17,6 +17,7 @@
 (require 'early-init-utils)
 
 (setq neo/cache-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.cache")))
+(setq neo/config-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.cache")))
 
 (startup-redirect-eln-cache
  (expand-file-name
@@ -29,7 +30,7 @@
 (let* ((instance-name (neo/get-emacs-instance-name))
        (early-config (expand-file-name
                       (format "%s-early-init-config.el" instance-name)
-		      neo/cache-directory)))
+		      neo/config-directory)))
   (message (format "instance name: %s" instance-name))
   (message (format "config: %s [%s]" early-config (file-readable-p early-config)))
   (when (file-readable-p early-config)
