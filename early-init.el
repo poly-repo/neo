@@ -49,10 +49,8 @@
       (defun startup-echo-area-message () "")
       (defun display-startup-echo-area-message () nil)))
 
-
-
 ;; Load early frame settings if available
-(let ((init-file "~/.cache/neo/initial-frame-properties.el"))
+(let ((init-file (expand-file-name "initial-frame-properties.el" neo/cache-directory)))
   (when (file-readable-p init-file)
     (load-file init-file)))
 
