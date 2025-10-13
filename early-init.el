@@ -17,7 +17,7 @@
 (require 'early-init-utils)
 
 (setq neo/cache-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.cache")))
-(setq neo/config-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.cache")))
+(setq neo/config-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.config")))
 
 (startup-redirect-eln-cache
  (expand-file-name
