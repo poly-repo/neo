@@ -19,6 +19,9 @@
 (defvar no-littering-etc-directory (expand-file-name ".litter/config" user-emacs-directory))
 (defvar no-littering-var-directory (expand-file-name ".litter/data" user-emacs-directory))
 
+(defvar neo/cache-directory)
+(defvar neo/config-directory)
+
 (dolist (subdir '("core"))
   (add-to-list 'load-path (expand-file-name subdir user-emacs-directory)))
 
