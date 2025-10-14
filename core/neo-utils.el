@@ -3,10 +3,10 @@
 
 (defmacro neo/write-early-init-config! (&rest vars)
   "Write current values of VARS to the early-init config file for this Emacs instance.
-The file is stored in ~/.config/neo/INSTANCE-NAME-early-init-config.el."
+The file is stored in ~/.config/INSTANCE-NAME/INSTANCE-NAME-early-init-config.el."
   `(let* ((instance-name (neo/get-emacs-instance-name))
           (file-name (format "%s-early-init-config.el" instance-name))
-          (target-dir (expand-file-name "neo" (or (getenv "XDG_CONFIG_HOME") "~/.config")))
+          (target-dir (expand-file-name instance-name (or (getenv "XDG_CONFIG_HOME") "~/.config")))
           (target-file (expand-file-name file-name target-dir)))
      (make-directory target-dir t)
      (with-temp-file target-file

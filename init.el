@@ -26,6 +26,6 @@
   (add-to-list 'load-path (expand-file-name subdir user-emacs-directory)))
 
 (require 'early-init-utils)
-(require 'neo)
+;(require 'neo)
 
 
