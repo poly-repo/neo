@@ -49,6 +49,10 @@
       (defun startup-echo-area-message () "")
       (defun display-startup-echo-area-message () nil)))
 
+;; Set a default font early to prevent frame resizing.
+;; This should match the font loaded by your theme.
+(set-face-attribute 'default nil :family "Noto Mono" :height 120)
+
 ;; Load early frame settings if available
 (let ((init-file (expand-file-name "initial-frame-properties.el" neo/cache-directory)))
   (when (file-readable-p init-file)
