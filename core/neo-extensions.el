@@ -435,23 +435,27 @@ Keeps a copy in ~/.cache/neo/"
 	(message "Launch Welcome")	;welcome should be able to handle existing files as well
       (load filename))))
 
-(neo/fetch-extensions)
-(setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
+(defvar neo/extensions-lock-file
+  (expand-file-name "neo_extensions.lock" "/tmp/")
+  "Temporary lock file to indicate extensions are being fetched/loaded.")
 
-(neo--dump-extension-names-and-descriptions extensions)
+(defun neo/maybe-fetch-extensions ()
+  "Fetch extensions only if the lock file doesn't exist.
+If fetching occurs, creates the lock file during the operation and
+removes it afterward."
+  (interactive)
+  (if (file-exists-p neo/extensions-lock-file)
+      (message "[neo] Extensions lock file exists, skipping fetch")
+    (progn
+      ;; Create lock file
+      (write-region "" nil neo/extensions-lock-file)
+      (unwind-protect
+          ;; Call the real fetch function
+          (neo/fetch-extensions)
+        ;; Ensure the lock is removed afterward
+        (when (file-exists-p neo/extensions-lock-file)
+          (delete-file neo/extensions-lock-file))))))
 
-;;; Actually load the extensions
-(neo/load-extensions extensions)
-
-;; (require 'neo-extensions-summary)
-;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
-
-(require 'neo-packages)
-(neo/replay-extension-packages "neo" "questionable-defaults")
-(neo/replay-extension-packages "neo" "ui")
-(neo/replay-extension-packages "neo" "session")
-(neo/replay-extension-packages "neo" "org")
-(neo/replay-extension-packages "neo" "terminal")
 
 (provide 'neo-extensions)
 
