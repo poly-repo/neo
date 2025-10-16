@@ -35,8 +35,9 @@
 )
 
 (cl-defstruct (neo/extension-slug
-               (:print-object
-                (lambda (obj stream)
+               (:print-function
+                (lambda (obj stream depth)
+                  (declare (ignore depth))
                   (princ (neo/extension-slug-to-string obj) stream))))
   (publisher "" :type string)
   (name "" :type string))
