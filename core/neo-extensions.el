@@ -34,11 +34,31 @@
   ;; register a hook for that.
 )
 
+(cl-defstruct (neo/extension-slug
+               (:print-object
+                (lambda (obj stream)
+                  (princ (neo/extension-slug-to-string obj) stream))))
+  (publisher "" :type string)
+  (name "" :type string))
+
+(defun neo/extension-slug-to-string (slug)
+  "Convert a `neo/extension-slug` object to a 'publisher/name' string."
+  (format "%s/%s"
+          (neo/extension-slug-publisher slug)
+          (neo/extension-slug-name slug)))
+
+(defun neo/make-extension-slug-from-string (slug-string)
+  "Create a `neo/extension-slug` from a string like 'publisher/name'."
+  (let* ((parts (split-string slug-string "/" t)))
+    (unless (= (length parts) 2)
+      (error "Invalid extension slug format: %s. Expected 'publisher/name'." slug-string))
+    (make-neo/extension-slug :publisher (car parts) :name (cadr parts))))
+
 (cl-defstruct neo/installation
   "Represents an installed extension."
-  extension-slug   ;; "publisher/name" string referring to a `neo/extension`
-  recommended-by   ;; list of extension slugs ("publisher/name")
-  suggested-by     ;; list of extension slugs ("publisher/name")
+  extension-slug   ;; `neo/extension-slug` referring to a `neo/extension`
+  recommended-by   ;; list of `neo/extension-slug` objects
+  suggested-by     ;; list of `neo/extension-slug` objects
   installed-at)    ;; timestamp
 
 (cl-defgeneric neo/render (object)
@@ -286,9 +306,8 @@ Labels are bolded, values are colored."
    (downcase name)))
 
 (defun neo--extension-slug (ext)
-  (format "%s/%s" (neo/extension-publisher ext) (neo--normalize-name (neo/extension-name ext))))
-
-;;; TODO replace blurb with slug
+  (make-neo/extension-slug :publisher (neo/extension-publisher ext)
+                           :name (neo--normalize-name (neo/extension-name ext))))
 
 (defmacro neo/extension (&rest args)
   "Register a new Neo extension and store it in `neo--extensions`.
@@ -336,8 +355,8 @@ Args:
 		     :depends-on depend-list
 		     :repository repo
 		     :summary-overlay nil))
-         (blurb (neo--extension-slug extension)))
-    `(puthash ,blurb ,extension neo--extensions)))
+         (slug (neo--extension-slug extension)))
+    `(puthash ,slug ,extension neo--extensions)))
 
 (defun neo--load-extension-manifests (extensions-summary-file)
   (load extensions-summary-file)
