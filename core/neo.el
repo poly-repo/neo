@@ -12,6 +12,9 @@
 
 (neo--require 'neo-extensions)
 
+(defvar neo/extensions-loaded-hook nil
+  "Hook run after all configured extensions are considered loaded.")
+
 ;;; EXECUTE
 (neo/maybe-fetch-extensions)
 (setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
@@ -25,12 +28,16 @@
 ;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
 
 (require 'neo-packages)
+
 (neo/replay-extension-packages "neo" "questionable-defaults")
-(neo/replay-extension-packages "neo" "ui")
-(neo/replay-extension-packages "neo" "session")
-(neo/replay-extension-packages "neo" "org")
-(neo/replay-extension-packages "neo" "terminal")
-(neo/replay-extension-packages "neo" "ai")
+;(neo/replay-extension-packages "neo" "ui")
+;(neo/replay-extension-packages "neo" "session")
+;(neo/replay-extension-packages "neo" "org")
+;(neo/replay-extension-packages "neo" "terminal")
+;(neo/replay-extension-packages "neo" "lsp")
+;(neo/replay-extension-packages "neo" "ai")
+
+(run-hooks 'neo/extensions-loaded-hook)
 
 ;; (defun neo-new ()
 ;;   "Create a new `neo' instance and fetch extensions."
