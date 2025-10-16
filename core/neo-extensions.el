@@ -43,16 +43,16 @@
   (name "" :type string))
 
 (defun neo/extension-slug-to-string (slug)
-  "Convert a `neo/extension-slug` object to a 'publisher/name' string."
-  (format "%s/%s"
+  "Convert a `neo/extension-slug` object to a 'publisher:name' string."
+  (format "%s:%s"
           (neo/extension-slug-publisher slug)
           (neo/extension-slug-name slug)))
 
 (defun neo/make-extension-slug-from-string (slug-string)
-  "Create a `neo/extension-slug` from a string like 'publisher/name'."
-  (let* ((parts (split-string slug-string "/" t)))
+  "Create a `neo/extension-slug` from a string like 'publisher:name'."
+  (let* ((parts (split-string slug-string ":" t)))
     (unless (= (length parts) 2)
-      (error "Invalid extension slug format: %s. Expected 'publisher/name'." slug-string))
+      (error "Invalid extension slug format: %s. Expected 'publisher:name'." slug-string))
     (make-neo/extension-slug :publisher (car parts) :name (cadr parts))))
 
 (cl-defstruct neo/installation
@@ -65,6 +65,9 @@
 (cl-defstruct neo/orphaned-extension
   "Represents an extension that is installed but no longer available."
   slug)
+
+(defvar neo/installed-extensions nil
+  "A list of `neo/installation` objects, defining which extensions are installed and should be loaded.")
 
 (cl-defgeneric neo/render (object)
   "Render OBJECT at point and return a point marker.")
@@ -298,7 +301,7 @@ Labels are bolded, values are colored."
       (insert (format "%-12s: %s\n" (capitalize (symbol-name key)) val)))))
 
 (defvar neo--extensions (make-hash-table :test #'equal)
-  "Hash table mapping publisher/name to `neo/extension` instances.")
+  "Hash table mapping publisher:name to `neo/extension` instances.")
 
 ;;; This is for debugging
 (defun neo--dump-extension-names-and-descriptions (extensions)
@@ -431,9 +434,17 @@ Temporarily adds the file's directory to `load-path` so `require` works."
         t)))))
 
 
-(defun neo/load-extensions (extensions)
-  (let ((extensions (neo--sorted-extensions-by-name  extensions)))
-    (mapcar #'neo--load-extension extensions)))
+(defun neo/load-extensions ()
+  "Load extensions specified in `neo/installed-extensions`.
+This function iterates through the `neo/installed-extensions` list, looks up
+each extension by its slug in the `neo--extensions` hash table of available
+extensions, and loads it if found."
+  (dolist (installation neo/installed-extensions)
+    (let* ((slug (neo/installation-extension-slug installation))
+           (extension (gethash slug neo--extensions)))
+      (if extension
+          (neo--load-extension extension)
+        (message "[neo] Warning: Installed extension %s not found in available extensions." slug)))))
 
 ;; TODO only fetch if older than X hours unless FORCE is used
 (defun neo/fetch-extensions ()
