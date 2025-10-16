@@ -62,6 +62,10 @@
   suggested-by     ;; list of `neo/extension-slug` objects
   installed-at)    ;; timestamp
 
+(cl-defstruct neo/orphaned-extension
+  "Represents an extension that is installed but no longer available."
+  slug)
+
 (cl-defgeneric neo/render (object)
   "Render OBJECT at point and return a point marker.")
 
@@ -187,6 +191,21 @@
     (neo/insert-thin-divider)
     
     ;; Final range
+    (let ((end (point)))
+      (put-text-property start end 'neo-extension ext)
+      (cons start end))))
+
+(cl-defmethod neo/render ((ext neo/orphaned-extension))
+  "Render an orphaned extension, indicating it's no longer available."
+  (let ((start (point)))
+    (insert (propertize (format "Orphaned Extension: %s"
+                                (neo/extension-slug-to-string (neo/orphaned-extension-slug ext)))
+                        'face '(:foreground "orange red" :weight bold :height 1.2)))
+    (insert "\n\n")
+    (insert (propertize "This extension is installed but no longer appears in the list of available extensions. It might have been renamed or removed by its publisher."
+                        'face '(:slant italic :height 0.95)))
+    (insert "\n\n")
+    (neo/insert-thin-divider)
     (let ((end (point)))
       (put-text-property start end 'neo-extension ext)
       (cons start end))))
