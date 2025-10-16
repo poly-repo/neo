@@ -39,7 +39,7 @@
                  :installed-at (current-time)))
               neo/my-enabled-extensions))
 
-(neo/load-extensions)
+(neo/load-extensions neo/installed-extensions)
 
 ;; (require 'neo-extensions-summary)
 ;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))

@@ -434,13 +434,13 @@ Temporarily adds the file's directory to `load-path` so `require` works."
         t)))))
 
 
-(defun neo/load-extensions ()
-  "Load extensions specified in `neo/installed-extensions`.
-This function iterates through the `neo/installed-extensions` list, looks up
-each extension by its slug in the `neo--extensions` hash table of available
-extensions, and loads it if found."
-  (message "LOAD EXTENSIONS:" neo/installed-extensions)
-  (dolist (installation neo/installed-extensions)
+(defun neo/load-extensions (installed-extensions)
+  "Load extensions specified in INSTALLED-EXTENSIONS.
+This function iterates through the INSTALLED-EXTENSIONS list, which is a list
+of `neo/installation` objects. It looks up each extension by its slug in the
+`neo--extensions` hash table of available extensions, and loads it if found."
+  (message "LOAD EXTENSIONS:" installed-extensions)
+  (dolist (installation installed-extensions)
     (let* ((slug (neo/installation-extension-slug installation))
            (extension (gethash slug neo--extensions)))
       (if extension
