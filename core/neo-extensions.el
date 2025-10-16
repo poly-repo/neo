@@ -439,6 +439,7 @@ Temporarily adds the file's directory to `load-path` so `require` works."
 This function iterates through the `neo/installed-extensions` list, looks up
 each extension by its slug in the `neo--extensions` hash table of available
 extensions, and loads it if found."
+  (message "LOAD EXTENSIONS:" neo/installed-extensions)
   (dolist (installation neo/installed-extensions)
     (let* ((slug (neo/installation-extension-slug installation))
            (extension (gethash slug neo--extensions)))
