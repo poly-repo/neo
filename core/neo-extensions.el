@@ -34,6 +34,12 @@
   ;; register a hook for that.
 )
 
+(cl-defstruct neo/installation
+  "Represents an installed extension."
+  extension-slug   ;; "publisher/name" string referring to a `neo/extension`
+  recommended-by   ;; list of extension slugs ("publisher/name")
+  suggested-by     ;; list of extension slugs ("publisher/name")
+  installed-at)    ;; timestamp
 
 (cl-defgeneric neo/render (object)
   "Render OBJECT at point and return a point marker.")
