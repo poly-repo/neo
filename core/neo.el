@@ -23,14 +23,14 @@
 
 ;;; Actually load the extensions
 (defvar neo/my-enabled-extensions
-  '("neo:questionable-defaults"
-    "neo:ui"
-    "neo:session"
-    "neo:org"
-    "neo:terminal"
-    "neo:lsp"
-    "neo:ai")
-  "Temporary list of extensions to load.")
+  '("neo:questionable-defaults"))
+  ;;   "neo:ui"
+  ;;   "neo:session"
+  ;;   "neo:org"
+  ;;   "neo:terminal"
+  ;;   "neo:lsp"
+  ;;   "neo:ai")
+  ;; "Temporary list of extensions to load.")
 
 (setq neo/installed-extensions
       (mapcar (lambda (slug-string)
