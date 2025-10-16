@@ -5,12 +5,12 @@
 (neo--require 'neo-custom)			; customization groups
 (neo--require 'neo-utils)			; utility functions
 (neo--require 'neo-config)
-(neo--require 'neo-packages)
 
 ;(neo--require 'neo-struct)
 ;(neo--require 'neo-extensions-fetch)
 
 (neo--require 'neo-extensions)
+(neo--require 'neo-packages)
 
 (defvar neo/extensions-loaded-hook nil
   "Hook run after all configured extensions are considered loaded.")
@@ -45,10 +45,8 @@
 ;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
 
 (dolist (installation neo/installed-extensions)
-  (let* ((slug (neo/installation-extension-slug installation))
-         (publisher (neo/extension-slug-publisher slug))
-         (name (neo/extension-slug-name slug)))
-    (neo/replay-extension-packages publisher name)))
+  (let* ((slug (neo/installation-extension-slug installation)))
+    (neo/replay-extension-packages slug)))
 
 (run-hooks 'neo/extensions-loaded-hook)
 

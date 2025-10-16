@@ -1,6 +1,7 @@
 ;; -*- lexical-binding: t -*-
 
 (require 'map)
+(require 'neo-extensions)
 
 ;; TODO: resolve the mess w/ :ensure-system-packages
 
@@ -195,23 +196,25 @@ indexed by (user . extension-base-name)."
 
 (require 'pp)
 
-(defun neo/replay-extension-packages (&optional user extension)
+(defun neo/replay-extension-packages (&optional slug)
   "Replay all stored `use-package` expansions.
 
-If USER and EXTENSION are provided, only replays that entry."
+If SLUG is provided, a `neo/extension-slug` object, only replays that entry."
   (interactive)
-  (dolist (entry neo--enabled-packages)
-    (let ((key (car entry))
-          (forms (cdr entry)))
-      (message "Considering extension %s:%s" (car key) (cdr key))
-      (when (or (not user)
-                (and (equal user (car key))
-                     (equal extension (cdr key))))
-        (dolist (form forms)
-	  (message "[%s]" (cadr form)))
-        (dolist (form forms)
-	  (message "\n---\n%s" (pp-to-string form))
-          (eval form))))))
+  (let ((user (when slug (neo/extension-slug-publisher slug)))
+        (extension (when slug (neo/extension-slug-name slug))))
+    (dolist (entry neo--enabled-packages)
+      (let ((key (car entry))
+            (forms (cdr entry)))
+        (message "Considering extension %s:%s" (car key) (cdr key))
+        (when (or (not slug)
+                  (and (equal user (car key))
+                       (equal extension (cdr key))))
+          (dolist (form forms)
+            (message "[%s]" (cadr form)))
+          (dolist (form forms)
+            (message "\n---\n%s" (pp-to-string form))
+            (eval form)))))))
 
 
 (elpaca
