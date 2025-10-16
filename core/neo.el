@@ -44,6 +44,12 @@
 ;; (require 'neo-extensions-summary)
 ;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
 
+(dolist (installation neo/installed-extensions)
+  (let* ((slug (neo/installation-extension-slug installation))
+         (publisher (neo/extension-slug-publisher slug))
+         (name (neo/extension-slug-name slug)))
+    (neo/replay-extension-packages publisher name)))
+
 (run-hooks 'neo/extensions-loaded-hook)
 
 ;; (defun neo-new ()
