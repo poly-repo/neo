@@ -22,20 +22,27 @@
 (neo--dump-extension-names-and-descriptions extensions)
 
 ;;; Actually load the extensions
-(neo/load-extensions extensions)
+(defvar neo/my-enabled-extensions
+  '("neo:questionable-defaults"
+    "neo:ui"
+    "neo:session"
+    "neo:org"
+    "neo:terminal"
+    "neo:lsp"
+    "neo:ai")
+  "Temporary list of extensions to load.")
+
+(setq neo/installed-extensions
+      (mapcar (lambda (slug-string)
+                (make-neo/installation
+                 :extension-slug (neo/make-extension-slug-from-string slug-string)
+                 :installed-at (current-time)))
+              neo/my-enabled-extensions))
+
+(neo/load-extensions)
 
 ;; (require 'neo-extensions-summary)
 ;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
-
-(require 'neo-packages)
-
-(neo/replay-extension-packages "neo" "questionable-defaults")
-;(neo/replay-extension-packages "neo" "ui")
-;(neo/replay-extension-packages "neo" "session")
-;(neo/replay-extension-packages "neo" "org")
-;(neo/replay-extension-packages "neo" "terminal")
-;(neo/replay-extension-packages "neo" "lsp")
-;(neo/replay-extension-packages "neo" "ai")
 
 (run-hooks 'neo/extensions-loaded-hook)
 
