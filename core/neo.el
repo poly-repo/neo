@@ -39,6 +39,12 @@
                  :installed-at (current-time)))
               neo/my-enabled-extensions))
 
+(message "--- Dumping neo--extensions hash table ---")
+(maphash (lambda (key value)
+           (message "  Key: '%s' -> Ext: '%s'" key (neo/extension-title value)))
+         neo--extensions)
+(message "-----------------------------------------")
+
 (neo/load-extensions neo/installed-extensions)
 
 ;; (require 'neo-extensions-summary)

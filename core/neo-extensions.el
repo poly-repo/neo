@@ -443,10 +443,12 @@ of `neo/installation` objects. It looks up each extension by its slug in the
     (let* ((slug (neo/installation-extension-slug installation))
            (slug-string (neo/extension-slug-to-string slug))
            (extension (gethash slug-string neo--extensions)))
-      (message "Trying to load extension %s" slug)
+      (message "Attempting to load extension with slug: '%s'" slug-string)
       (if extension
-          (neo--load-extension extension)
-        (message "[neo] Warning: Installed extension %s not found in available extensions." slug-string)))))
+          (progn
+            (message "  -> Found, loading '%s'" (neo/extension-title extension))
+            (neo--load-extension extension))
+        (message "  -> Warning: Extension with slug '%s' not found in registry." slug-string)))))
 
 ;; TODO only fetch if older than X hours unless FORCE is used
 (defun neo/fetch-extensions ()
