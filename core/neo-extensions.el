@@ -379,6 +379,7 @@ Args:
 		     :repository repo
 		     :summary-overlay nil))
          (slug (neo--extension-slug extension)))
+    (message "Storing under slug %s" slug)
     `(puthash ,slug ,extension neo--extensions)))
 
 (defun neo--load-extension-manifests (extensions-summary-file)
@@ -439,10 +440,12 @@ Temporarily adds the file's directory to `load-path` so `require` works."
 This function iterates through the INSTALLED-EXTENSIONS list, which is a list
 of `neo/installation` objects. It looks up each extension by its slug in the
 `neo--extensions` hash table of available extensions, and loads it if found."
-  (message "LOAD EXTENSIONS:" installed-extensions)
+  (message "LOAD EXTENSIONS: |%s|" installed-extensions)
   (dolist (installation installed-extensions)
+    (message "> %s" installation)
     (let* ((slug (neo/installation-extension-slug installation))
            (extension (gethash slug neo--extensions)))
+      (message "> slug: %s" slug)
       (if extension
           (neo--load-extension extension)
         (message "[neo] Warning: Installed extension %s not found in available extensions." slug)))))
