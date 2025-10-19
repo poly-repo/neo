@@ -19,18 +19,25 @@
 (neo/maybe-fetch-extensions)
 (setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
 
+(message "------------------")
+(message ">>> %s" extensions)
+(message "---")
+(message "%s" neo-extensions-list)
+(message "------------------")
 (neo--dump-extension-names-and-descriptions extensions)
 
 ;;; Actually load the extensions
 (defvar neo/my-enabled-extensions
-  '("neo:questionable-defaults"))
-  ;;   "neo:ui"
-  ;;   "neo:session"
-  ;;   "neo:org"
-  ;;   "neo:terminal"
-  ;;   "neo:lsp"
-  ;;   "neo:ai")
-  ;; "Temporary list of extensions to load.")
+  '("neo:questionable-defaults"
+    ;;   "neo:ui"
+    ;;   "neo:session"
+    ;;   "neo:org"
+    ;;   "neo:terminal"
+    ;;   "neo:lsp"
+    "neo:leetcode"
+    "neo:ai"
+    )
+  "Temporary list of extensions to load.")
 
 (setq neo/installed-extensions
       (mapcar (lambda (slug-string)
