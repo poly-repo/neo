@@ -440,13 +440,10 @@ Temporarily adds the file's directory to `load-path` so `require` works."
 This function iterates through the INSTALLED-EXTENSIONS list, which is a list
 of `neo/installation` objects. It looks up each extension by its slug in the
 `neo--extensions` hash table of available extensions, and loads it if found."
-  (message "LOAD EXTENSIONS: |%s|" installed-extensions)
   (dolist (installation installed-extensions)
-    (message "> %s" installation)
     (let* ((slug (neo/installation-extension-slug installation))
            (slug-string (neo/extension-slug-to-string slug))
            (extension (gethash slug-string neo--extensions)))
-      (message "> slug: %s" slug-string)
       (if extension
           (neo--load-extension extension)
         (message "[neo] Warning: Installed extension %s not found in available extensions." slug-string)))))

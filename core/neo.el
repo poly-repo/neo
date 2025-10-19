@@ -19,13 +19,6 @@
 (neo/maybe-fetch-extensions)
 (setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
 
-(message "------------------")
-(message ">>> %s" extensions)
-(message "---")
-(message "%s" neo-extensions-list)
-(message "------------------")
-(neo--dump-extension-names-and-descriptions extensions)
-
 ;;; Actually load the extensions
 (defvar neo/my-enabled-extensions
   '("neo:questionable-defaults"
