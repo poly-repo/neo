@@ -303,6 +303,16 @@ Labels are bolded, values are colored."
 (defvar neo--extensions (make-hash-table :test #'equal)
   "Hash table mapping publisher:name to `neo/extension` instances.")
 
+(defun neo--normalize-name (name)
+  "Normalize NAME by downcasing and replacing spaces with dashes."
+  (replace-regexp-in-string
+   " " "-"
+   (downcase name)))
+
+(defun neo--extension-slug (ext)
+  (make-neo/extension-slug :publisher (neo/extension-publisher ext)
+                           :name (neo--normalize-name (neo/extension-name ext))))
+
 ;;; This is for debugging
 (defun neo--dump-extension-names-and-descriptions (extensions)
   "Display names and descriptions from `neo--extensions` in a temporary buffer."
@@ -320,17 +330,6 @@ Labels are bolded, values are colored."
 	 (insert "\n\n"))
        extensions))
     (pop-to-buffer buf)))
-
-
-(defun neo--normalize-name (name)
-  "Normalize NAME by downcasing and replacing spaces with dashes."
-  (replace-regexp-in-string
-   " " "-"
-   (downcase name)))
-
-(defun neo--extension-slug (ext)
-  (make-neo/extension-slug :publisher (neo/extension-publisher ext)
-                           :name (neo--normalize-name (neo/extension-name ext))))
 
 (defmacro neo/extension (&rest args)
   "Register a new Neo extension and store it in `neo--extensions`.
