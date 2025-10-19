@@ -443,6 +443,7 @@ of `neo/installation` objects. It looks up each extension by its slug in the
     (let* ((slug (neo/installation-extension-slug installation))
            (slug-string (neo/extension-slug-to-string slug))
            (extension (gethash slug-string neo--extensions)))
+      (message "Trying to load extension %s" slug)
       (if extension
           (neo--load-extension extension)
         (message "[neo] Warning: Installed extension %s not found in available extensions." slug-string)))))
