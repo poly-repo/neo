@@ -380,7 +380,7 @@ Args:
 		     :summary-overlay nil))
          (slug (neo--extension-slug extension)))
     (message "Storing under slug %s" slug)
-    `(puthash ,slug ,extension neo--extensions)))
+    `(puthash ,(neo/extension-slug-to-string slug) ,extension neo--extensions)))
 
 (defun neo--load-extension-manifests (extensions-summary-file)
   (load extensions-summary-file)
@@ -444,11 +444,12 @@ of `neo/installation` objects. It looks up each extension by its slug in the
   (dolist (installation installed-extensions)
     (message "> %s" installation)
     (let* ((slug (neo/installation-extension-slug installation))
-           (extension (gethash slug neo--extensions)))
-      (message "> slug: %s" slug)
+           (slug-string (neo/extension-slug-to-string slug))
+           (extension (gethash slug-string neo--extensions)))
+      (message "> slug: %s" slug-string)
       (if extension
           (neo--load-extension extension)
-        (message "[neo] Warning: Installed extension %s not found in available extensions." slug)))))
+        (message "[neo] Warning: Installed extension %s not found in available extensions." slug-string)))))
 
 ;; TODO only fetch if older than X hours unless FORCE is used
 (defun neo/fetch-extensions ()
