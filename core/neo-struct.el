@@ -33,6 +33,22 @@
          (slug-string (neo/extension-slug-to-string slug)))
     (puthash slug-string installation installed)))
 
+;; This is a temporary function that will be made unnecessary when the UI can
+;; select extensions to be installed and we're able to persist and retrieve that
+;; selection.
+(defun neo/install-extensions-from-slugs (slugs)
+  "Install extensions from a list of SLUGS.
+SLUGS can be a list of `neo/extension-slug` objects or strings
+in 'publisher:name' format."
+  (dolist (slug-item slugs)
+    (let* ((slug (if (stringp slug-item)
+                     (neo/make-extension-slug-from-string slug-item)
+                   slug-item))
+           (installation (make-neo/installation
+                          :extension-slug slug
+                          :installed-at (current-time))))
+      (neo/install-extension installation))))
+
 (defun neo/debug-info ()
   "Display debug information about the `neo` instance in a new buffer."
   (interactive)
