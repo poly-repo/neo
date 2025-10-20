@@ -56,6 +56,26 @@ in 'publisher:name' format."
                           :installed-at (current-time))))
       (neo/install-extension framework installation))))
 
+(cl-defgeneric neo/load-installed-extensions (framework)
+  "Load all installed extensions for FRAMEWORK.")
+
+(cl-defmethod neo/load-installed-extensions ((framework neo-framework))
+  "Load all installed extensions for FRAMEWORK."
+  (let ((installed (neo-framework-installed-extensions framework))
+        (available (neo-framework-available-extensions framework)))
+    (maphash
+     (lambda (_slug installation)
+       (let* ((slug (neo/installation-extension-slug installation))
+              (slug-string (neo/extension-slug-to-string slug))
+              (extension (gethash slug-string available)))
+         (message "Attempting to load extension with slug: '%s'" slug-string)
+         (if extension
+             (progn
+               (message "  -> Found, loading '%s'" (neo/extension-title extension))
+               (neo--load-extension extension))
+           (message "  -> Warning: Extension with slug '%s' not found in registry." slug-string))))
+     installed)))
+
 (cl-defgeneric neo/render-debug-info (framework)
   "Render debug info for FRAMEWORK into a buffer.")
 
