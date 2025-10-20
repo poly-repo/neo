@@ -56,6 +56,17 @@ in 'publisher:name' format."
                           :installed-at (current-time))))
       (neo/install-extension framework installation))))
 
+(cl-defgeneric neo/installed-slugs (framework)
+  "Return a list of `neo/extension-slug` objects for all installed extensions in FRAMEWORK.")
+
+(cl-defmethod neo/installed-slugs ((framework neo-framework))
+  "Return a list of `neo/extension-slug` objects for all installed extensions in FRAMEWORK."
+  (let ((slugs '()))
+    (maphash (lambda (_slug installation)
+               (push (neo/installation-extension-slug installation) slugs))
+             (neo-framework-installed-extensions framework))
+    slugs))
+
 (cl-defgeneric neo/load-installed-extensions (framework)
   "Load all installed extensions for FRAMEWORK.")
 
