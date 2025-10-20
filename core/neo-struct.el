@@ -15,15 +15,9 @@
   "Create a `neo` instance, populating available extensions from cache."
   (let* ((instance (neo/get-emacs-instance-name))
          (extensions-file (expand-file-name (format ".cache/%s/neo-extensions.el" instance) "~"))
-         (available (make-hash-table :test 'equal)))
-    (when (file-exists-p extensions-file)
-      (let ((neo--extensions (make-hash-table :test 'equal))
-            (neo-extensions-list nil))
-        (load extensions-file nil 'nomessage 'nosuffix)
-        (when neo-extensions-list
-          (dolist (ext-form neo-extensions-list)
-            (eval ext-form)))
-        (setq available neo--extensions)))
+         (available (if (file-exists-p extensions-file)
+                        (neo--load-extension-manifests extensions-file)
+                      (make-hash-table :test 'equal))))
     (make-neo-framework :available-extensions available)))
 
 (defun neo/get-instance ()

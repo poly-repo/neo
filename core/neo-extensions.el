@@ -382,8 +382,11 @@ Args:
     `(puthash ,(neo/extension-slug-to-string slug) ,extension neo--extensions)))
 
 (defun neo--load-extension-manifests (extensions-summary-file)
-  (load extensions-summary-file)
-  neo--extensions)
+  "Load extension manifests from EXTENSIONS-SUMMARY-FILE.
+This populates a temporary `neo--extensions` and returns it."
+  (let ((neo--extensions (make-hash-table :test 'equal)))
+    (load extensions-summary-file nil 'nomessage 'nosuffix)
+    neo--extensions))
 
   
 (defun neo--sorted-extensions-by-name (extensions)
