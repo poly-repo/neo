@@ -87,6 +87,18 @@ in 'publisher:name' format."
            (message "  -> Warning: Extension with slug '%s' not found in registry." slug-string))))
      installed)))
 
+(cl-defgeneric neo/replay-installed-extensions-packages (framework)
+  "Replay package configurations for all installed extensions in FRAMEWORK.")
+
+(cl-defmethod neo/replay-installed-extensions-packages ((framework neo-framework))
+  "Replay package configurations for all installed extensions in FRAMEWORK."
+  (let ((installed (neo-framework-installed-extensions framework)))
+    (maphash
+     (lambda (_slug installation)
+       (let ((slug (neo/installation-extension-slug installation)))
+         (neo/replay-extension-packages slug)))
+     installed)))
+
 (cl-defgeneric neo/render-debug-info (framework)
   "Render debug info for FRAMEWORK into a buffer.")
 
