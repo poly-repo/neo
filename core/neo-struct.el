@@ -33,8 +33,6 @@
       (erase-buffer)
       (insert (format "--- Neo Debug Information ---\n\n"))
       (insert "Global `neo` instance (summary):\n")
-      (let ((print-level 2) (print-length 5))
-        (pp instance (current-buffer)))
       (insert "\n\nAvailable Extensions ("
               (prin1-to-string (hash-table-count (neo-framework-available-extensions instance)))
               "):\n")
