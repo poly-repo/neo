@@ -25,6 +25,14 @@
   (or neo
       (setq neo (neo/make-from-cache))))
 
+(defun neo/install-extension (installation)
+  "Add INSTALLATION to the list of installed extensions in the global `neo` instance."
+  (let* ((instance (neo/get-instance))
+         (installed (neo-framework-installed-extensions instance))
+         (slug (neo/installation-extension-slug installation))
+         (slug-string (neo/extension-slug-to-string slug)))
+    (puthash slug-string installation installed)))
+
 (defun neo/debug-info ()
   "Display debug information about the `neo` instance in a new buffer."
   (interactive)
