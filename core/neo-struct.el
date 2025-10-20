@@ -34,6 +34,7 @@
   (let* ((installed (neo-framework-installed-extensions framework))
          (slug (neo/installation-extension-slug installation))
          (slug-string (neo/extension-slug-to-string slug)))
+    (message "Adding %s" slug-string)
     (puthash slug-string installation installed)))
 
 ;; This is a temporary function that will be made unnecessary when the UI can
