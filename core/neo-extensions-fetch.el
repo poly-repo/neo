@@ -31,11 +31,13 @@ variable `neo-extensions-list' to a list of extension plists."
 This function downloads the manifest specified by
 `neo/extensions-manifest-url', loads it, and populates the
 `available-extensions' slot of the `neo' struct instance."
+  (message "AYEEE")
   (let* ((asset (neo/make-extensions-config
                  :name "neo-extensions"
                  :remote neo/extensions-manifest-url
                  :error-on-missing nil)) ; Don't error if offline
          (manifest-file (neo/ensure asset)))
+    (message "LOADING EXTENSIONS")
     (when manifest-file
       (condition-case err
           (with-temp-buffer
@@ -56,6 +58,7 @@ This function downloads the manifest specified by
         (error (message "[neo] failed to load extensions manifest %s: %s"
                         manifest-file (error-message-string err)))))))
 
+(message "LOADED extensions-fetch")
 (provide 'neo-extensions-fetch)
 
 ;;; neo-extensions-fetch.el ends here

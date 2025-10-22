@@ -211,8 +211,6 @@ If SLUG is provided, a `neo/extension-slug` object, only replays that entry."
                   (and (equal user (car key))
                        (equal extension (cdr key))))
           (dolist (form forms)
-            (message "[%s]" (cadr form)))
-          (dolist (form forms)
             (message "\n---\n%s" (pp-to-string form))
             (eval form)))))))
 

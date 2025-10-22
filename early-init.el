@@ -7,6 +7,15 @@
 
 ;;; Code:
 
+;; we'll have an option for disabling scrollbars. But even when
+;; enabled, there's no reason to have them in the minibuffer.
+(add-hook 'after-make-frame-functions
+          (lambda (frame)
+            (set-window-scroll-bars
+             (minibuffer-window frame) 0 nil 0 nil t)
+            (set-window-fringes
+             (minibuffer-window frame) 0 0 nil t)))
+
 (setq package-enable-at-startup nil)
 (setq package-activated-list nil)
 
@@ -16,8 +25,17 @@
              (expand-file-name "core" (file-name-directory (or load-file-name buffer-file-name))))
 (require 'early-init-utils)
 
-(setq neo/cache-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.cache")))
-(setq neo/config-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.config")))
+;; (setq neo/cache-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.cache")))
+;; (setq neo/config-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.config")))
+
+(eval-and-compile
+  (defvar no-littering-etc-directory
+    (expand-file-name ".litter/config" user-emacs-directory))
+  (defvar no-littering-var-directory
+    (expand-file-name ".litter/data" user-emacs-directory))
+  (defvar neo/cache-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.cache")))
+  (defvar neo/config-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.config"))))
+
 
 (startup-redirect-eln-cache
  (expand-file-name
@@ -31,10 +49,8 @@
        (early-config (expand-file-name
                       (format "%s-early-init-config.el" instance-name)
 		      neo/config-directory)))
-  (message (format "instance name: %s" instance-name))
-  (message (format "config: %s [%s]" early-config (file-readable-p early-config)))
   (when (file-readable-p early-config)
-    (message (format "Reading %s" early-config))
+    (message "LOADING EARLY CONFIG")
     (load early-config nil 'nomessage)))
 
 (setq gc-cons-threshold (* 100 1000 1000))

@@ -5,56 +5,83 @@
 (neo--require 'neo-custom)			; customization groups
 (neo--require 'neo-utils)			; utility functions
 (neo--require 'neo-config)
-
-;(neo--require 'neo-struct)
-;(neo--require 'neo-extensions-fetch)
-
-(neo--require 'neo-extensions)
 (neo--require 'neo-packages)
 
-(defvar neo/extensions-loaded-hook nil
-  "Hook run after all configured extensions are considered loaded.")
+(neo--require 'neo-struct)
 
-;;; EXECUTE
-(neo/maybe-fetch-extensions)
-(setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
+(setq neo (neo/get-instance))
 
-;;; Actually load the extensions
 (defvar neo/my-enabled-extensions
   '("neo:questionable-defaults"
-    ;;   "neo:ui"
-    ;;   "neo:session"
+    "neo:modeline"
+    "neo:ui"
+    "neo:session"
     ;;   "neo:org"
-    ;;   "neo:terminal"
-    ;;   "neo:lsp"
+    "neo:terminal"
+    "neo:versions"
+    "neo:build"
+    "neo:lsp"
+    "neo:python"
     "neo:leetcode"
     "neo:ai"
     )
   "Temporary list of extensions to load.")
 
-(setq neo/installed-extensions
-      (mapcar (lambda (slug-string)
-                (make-neo/installation
-                 :extension-slug (neo/make-extension-slug-from-string slug-string)
-                 :installed-at (current-time)))
-              neo/my-enabled-extensions))
+(neo/install-extensions-from-slugs neo neo/my-enabled-extensions)
+(neo/load-installed-extensions neo)
+;(neo/install-extensions-from-slugs neo)
+(neo/replay-installed-extensions-packages neo)
 
-(message "--- Dumping neo--extensions hash table ---")
-(maphash (lambda (key value)
-           (message "  Key: '%s' -> Ext: '%s'" key (neo/extension-title value)))
-         neo--extensions)
-(message "-----------------------------------------")
+(neo/debug-info)
 
-(neo/load-extensions neo/installed-extensions)
+;; ;(neo--require 'neo-extensions-fetch)
 
-;; (require 'neo-extensions-summary)
-;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
+;; (neo--require 'neo-extensions)
+;; (neo--require 'neo-packages)
 
-(dolist (installation neo/installed-extensions)
-  (let* ((slug (neo/installation-extension-slug installation)))
-    (neo/replay-extension-packages slug)))
+;; (defvar neo/extensions-loaded-hook nil
+;;   "Hook run after all configured extensions are considered loaded.")
 
-(run-hooks 'neo/extensions-loaded-hook)
+;; ;;; EXECUTE
+;; (neo/maybe-fetch-extensions)
+;; (setq extensions (neo--load-extension-manifests (format "~/.cache/%s/neo-extensions.el" (neo/get-emacs-instance-name))))
+
+;; ;;; Actually load the extensions
+;; (defvar neo/my-enabled-extensions
+;;   '("neo:questionable-defaults"
+;;     ;;   "neo:ui"
+;;     ;;   "neo:session"
+;;     ;;   "neo:org"
+;;     ;;   "neo:terminal"
+;;     ;;   "neo:lsp"
+;;     "neo:leetcode"
+;;     "neo:ai"
+;;     )
+;;   "Temporary list of extensions to load.")
+
+;; (setq neo/installed-extensions
+;;       (mapcar (lambda (slug-string)
+;;                 (make-neo/installation
+;;                  :extension-slug (neo/make-extension-slug-from-string slug-string)
+;;                  :installed-at (current-time)))
+;;               neo/my-enabled-extensions))
+
+;; (message "--- Dumping neo--extensions hash table ---")
+;; (maphash (lambda (key value)
+;;            (message "  Key: '%s' -> Ext: '%s'" key (neo/extension-title value)))
+;;          neo--extensions)
+;; (message "-----------------------------------------")
+
+;; (neo/load-extensions neo/installed-extensions)
+
+;; ;; (require 'neo-extensions-summary)
+;; ;; (neo/extensions-summary-open-buffer (neo--sorted-extensions-by-name extensions))
+
+;; (dolist (installation neo/installed-extensions)
+;;   (let* ((slug (neo/installation-extension-slug installation)))
+;;     (neo/replay-extension-packages slug)))
+
+;; (run-hooks 'neo/extensions-loaded-hook)
 
 ;; (defun neo-new ()
 ;;   "Create a new `neo' instance and fetch extensions."

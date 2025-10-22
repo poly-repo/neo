@@ -1,9 +1,12 @@
 #!/bin/bash
 # Ehi, Emacs this is -*- shell-script -*-
 
+INSTANCE=${1:-emacs}
+
 set -euo pipefail
 
 REQUIRED_REMOTE="poly-repo.github.com:poly-repo/uno.git"
+#REQUIRED_REMOTE="https://github.com/poly-repo/neo.git"
 
 # Check if we're inside a git repo
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -21,7 +24,7 @@ fi
 
 cd /home/mav/Projects/uno/devex/editors/emacs/extensions
 
-BASE_NAME="$HOME/.cache/emacs/neo-extensions"
+BASE_NAME="$HOME/.cache/${INSTANCE}/neo-extensions"
 VARS="(setq output-file \"$BASE_NAME.el\" digest-file \"$BASE_NAME.sha256\")"
 echo "$VARS"
 emacs --batch --eval "$VARS" -l build/extensions.el
