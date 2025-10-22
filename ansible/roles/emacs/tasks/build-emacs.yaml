@@ -6,15 +6,15 @@
     source: "{{item.source}}"
     config: '{{item.config|default([])}}'
     patch: '{{item.patch|default("")}}'
+    suffix: '{{item.suffix|default("")}}'
 
 - name: Check for native compilation
   set_fact:
     config_options: "{{config|join(' ') if config is defined else ''}}"
-    native_compilation: "{{config|join('') is search('with-native-compilation')}}"
 
 - name: Define target dir
   set_fact:
-    emacs_target_dir: "{{ ansible_user_dir }}/.local/emacs-{{emacs_version | string}}{{('-native' if native_compilation else '')}}"
+    emacs_target_dir: "{{ ansible_user_dir }}/.local/emacs-{{emacs_version | string}}{{ '-' + suffix if suffix | length > 0 else '' }}"
 
 - name: Set Emacs base url (release candidates)
   set_fact:
