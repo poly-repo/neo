@@ -1,0 +1,253 @@
+#!/usr/bin/env bash
+# create-and-run-debian13-cloud-vm.sh
+# Create an SSH key, seed cloud-init, make a qcow2 overlay from Debian 13 nocloud image,
+# define and start a libvirt VM, and open a virt-viewer fullscreen console.
+#
+# Usage:
+#   ./create-and-run-debian13-cloud-vm.sh [VM_NAME]
+#
+# Defaults:
+#   VM_NAME=debian13-cloud
+#   WORKDIR=./debian13-cloud
+#   SSH key created at WORKDIR/id_ed25519 (if missing)
+#
+set -euo pipefail
+
+#####################
+# User configurable #
+#####################
+VM_NAME="${1:-debian13-cloud}"
+WORKDIR="${PWD}/${VM_NAME}-work"
+IMG_URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-nocloud-amd64.qcow2"
+BACKING_BASENAME="$(basename "$IMG_URL")"
+BACKING_IMG="${WORKDIR}/${BACKING_BASENAME}"
+FINAL_IMG="${WORKDIR}/${VM_NAME}.qcow2"
+SEED_ISO="${WORKDIR}/seed.iso"
+KEY_PRI="${WORKDIR}/id_ed25519"
+KEY_PUB="${KEY_PRI}.pub"
+USERNAME="clouduser"
+USER_FULLNAME="Cloud User"
+VM_MEM=2048
+VM_VCPUS=2
+# network: default libvirt network will be used (NAT). Adjust if you have different network.
+NET="network=default"
+
+#########################
+# Helper / sanity checks#
+#########################
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+require() {
+  local cmd="$1"
+  if ! command_exists "$cmd"; then
+    echo "ERROR: required command '$cmd' not found. Install it and re-run." >&2
+    exit 2
+  fi
+}
+
+# Check runtime dependencies for main flow
+require wget
+require qemu-img
+require cloud-localds
+require virt-install
+require virt-viewer
+require ssh-keygen
+
+mkdir -p "$WORKDIR"
+cd "$WORKDIR"
+
+echo "[info] workdir = $WORKDIR"
+echo "[info] VM name = $VM_NAME"
+
+#########################
+# Download backing image#
+#########################
+if [ -f "$BACKING_IMG" ]; then
+  echo "[info] backing image already exists at $BACKING_IMG"
+else
+  echo "[info] downloading backing image: $IMG_URL"
+  if ! wget -O "$BACKING_IMG.part" "$IMG_URL"; then
+    echo "ERROR: failed to download $IMG_URL (404 or network error). Aborting." >&2
+    rm -f "$BACKING_IMG.part"
+    exit 3
+  fi
+  mv "$BACKING_IMG.part" "$BACKING_IMG"
+  echo "[info] downloaded backing image to $BACKING_IMG"
+fi
+
+#########################
+# Create SSH key if none#
+#########################
+if [ -f "$KEY_PRI" ] && [ -f "$KEY_PUB" ]; then
+  echo "[info] SSH key pair already exists: $KEY_PRI / $KEY_PUB"
+else
+  echo "[info] generating ed25519 keypair at $KEY_PRI"
+  ssh-keygen -t ed25519 -f "$KEY_PRI" -N "" -C "${VM_NAME}-access" >/dev/null
+  echo "[info] key generated."
+fi
+PUBKEY_CONTENT="$(sed -n '1p' "$KEY_PUB")"
+
+#########################
+# Build cloud-init files #
+#########################
+USERDATA_FILE="${WORKDIR}/user-data"
+METADATA_FILE="${WORKDIR}/meta-data"
+
+cat > "$USERDATA_FILE" <<EOF
+#cloud-config
+preserve_hostname: false
+hostname: ${VM_NAME}
+timezone: UTC
+
+users:
+  - name: ${USERNAME}
+    gecos: "${USER_FULLNAME}"
+    ssh-authorized-keys:
+      - ${PUBKEY_CONTENT}
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    shell: /bin/bash
+    lock_passwd: false
+
+package_update: true
+package_upgrade: true
+packages:
+  - cloud-init
+  - qemu-guest-agent
+
+runcmd:
+  - [ sh, -c, "systemctl enable qemu-guest-agent || true" ]
+EOF
+
+cat > "$METADATA_FILE" <<EOF
+instance-id: ${VM_NAME}-$(date +%s)
+local-hostname: ${VM_NAME}
+EOF
+
+echo "[info] created cloud-init user-data and meta-data"
+
+#########################
+# Create seed ISO       #
+#########################
+if [ -f "$SEED_ISO" ]; then
+  echo "[info] seed ISO already exists: $SEED_ISO"
+else
+  echo "[info] creating seed ISO with cloud-localds..."
+  cloud-localds --format=qcow2 "$SEED_ISO" "$USERDATA_FILE" "$METADATA_FILE"
+  echo "[info] seed ISO created: $SEED_ISO"
+fi
+
+#########################
+# Create overlay qcow2  #
+#########################
+backing="$(realpath "$BACKING_IMG")"
+final="$(realpath "$FINAL_IMG")"
+
+# Try modern style with backing_fmt
+if qemu-img create -f qcow2 -o backing_fmt=qcow2 -b "$backing" "$final" 2>/dev/null; then
+  echo "[info] overlay created: $final (backing_fmt=qcow2)"
+else
+  # Try old-style -F
+  if qemu-img create -f qcow2 -F qcow2 -b "$backing" "$final" 2>/dev/null; then
+    echo "[info] overlay created: $final (using -F qcow2)"
+  else
+    echo "[warning] qemu-img couldn't create overlay with backing file; falling back to copying base image (more disk usage)."
+    cp --reflink=auto "$backing" "$final" || cp "$backing" "$final"
+    echo "[info] copied base image to $final"
+  fi
+fi
+
+#########################
+# Define & start VM     #
+#########################
+# Check if domain already exists
+if virsh dominfo "$VM_NAME" >/dev/null 2>&1; then
+  echo "[info] domain $VM_NAME already exists."
+  STATE="$(virsh domstate "$VM_NAME" 2>/dev/null || true)"
+  echo "[info] domain state: $STATE"
+  if [ "$STATE" != "running" ]; then
+    echo "[info] starting domain $VM_NAME..."
+    sudo virsh start "$VM_NAME" || true
+  fi
+else
+  echo "[info] defining and starting domain via virt-install (import)"
+  sudo virt-install \
+    --name "$VM_NAME" \
+    --ram "$VM_MEM" \
+    --vcpus "$VM_VCPUS" \
+    --disk "path=$(realpath "$FINAL_IMG"),format=qcow2" \
+    --import \
+    --noautoconsole \
+    --network user \
+    --graphics spice \
+    --cdrom "$SEED_ISO" \
+    --osinfo detect=on,name=debian13 \
+    --wait -1 \
+    --quiet
+  echo "[info] virt-install finished (domain defined)."
+fi
+
+# Ensure domain is running
+echo "[info] ensuring domain is running..."
+virsh domstate "$VM_NAME" 2>/dev/null || true
+if ! virsh domstate "$VM_NAME" 2>/dev/null | grep -q running; then
+  echo "[info] starting domain $VM_NAME..."
+  sudo virsh start "$VM_NAME"
+  # wait a bit
+  sleep 2
+fi
+
+#########################
+# Wait for SSH ready    #
+#########################
+echo "[info] Waiting for guest to be reachable by SSH (attempts via libvirt port-forwarding or DHCP)."
+# If user uses default NAT network, we can try to find IP via virsh domifaddr (requires guest agent or dhcp leases)
+ip=""
+for i in $(seq 1 30); do
+  # Try domifaddr (works if qemu-guest-agent is present or libvirt knows addresses)
+  ip="$(virsh domifaddr "$VM_NAME" --source agent --full 2>/dev/null | awk '/ipv4/ {print $4}' | cut -d'/' -f1 | head -n1 || true)"
+  if [ -z "$ip" ]; then
+    # fallback: try DHCP leases
+    ip="$(virsh domifaddr "$VM_NAME" --source lease 2>/dev/null | awk '/ipv4/ {print $4}' | cut -d'/' -f1 | head -n1 || true)"
+  fi
+  if [ -n "$ip" ]; then
+    echo "[info] found IP address: $ip"
+    break
+  fi
+  echo "[info] waiting for IP... ($i/30)"
+  sleep 2
+done
+
+if [ -z "$ip" ]; then
+  echo "[info] guest IP not discovered via libvirt. If you used NAT, try SSH to localhost with port forwarding (see notes)."
+else
+  echo "[info] you can SSH with: ssh -i $KEY_PRI ${USERNAME}@${ip}"
+fi
+
+#########################
+# Open virt-viewer      #
+#########################
+echo "[info] launching virt-viewer (fullscreen attempt)..."
+# best-effort: virt-viewer supports --full-screen or --fullscreen on some versions
+if command -v virt-viewer >/dev/null 2>&1; then
+  if virt-viewer --help 2>&1 | grep -qi "full"; then
+    # try both spellings
+    if virt-viewer --connect qemu:///system --full-screen "$VM_NAME" >/dev/null 2>&1 & then
+      echo "[info] virt-viewer launched with --full-screen"
+    elif virt-viewer --connect qemu:///system --fullscreen "$VM_NAME" >/dev/null 2>&1 & then
+      echo "[info] virt-viewer launched with --fullscreen"
+    else
+      virt-viewer --connect qemu:///system "$VM_NAME" >/dev/null 2>&1 &
+      echo "[info] virt-viewer launched (no fullscreen flag)"
+    fi
+  else
+    virt-viewer --connect qemu:///system "$VM_NAME" >/dev/null 2>&1 &
+    echo "[info] virt-viewer launched (no fullscreen flag)"
+  fi
+else
+  echo "[warning] virt-viewer not found; install virt-viewer to open graphical console"
+fi
+
+echo
+echo "[done] VM '${VM_NAME}' created/started. SSH key: ${KEY_PRI} (private), ${KEY_PUB} (public)"
+echo "If IP discovered: ssh -i ${KEY_PRI} ${USERNAME}@${ip}"
+echo "To stop the VM: virsh shutdown ${VM_NAME}  (or virsh destroy ${VM_NAME})"
