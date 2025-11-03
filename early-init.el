@@ -16,6 +16,8 @@
             (set-window-fringes
              (minibuffer-window frame) 0 0 nil t)))
 
+;; prevent package.el from doing things, we'll use elpaca and use-package
+
 (setq package-enable-at-startup nil)
 (setq package-activated-list nil)
 
@@ -49,8 +51,10 @@
        (early-config (expand-file-name
                       (format "%s-early-init-config.el" instance-name)
 		      neo/config-directory)))
+  (when (not (file-readable-p early-config))
+    (message "EARLY CONFIG NOT FOUND IN %s" early-config))
   (when (file-readable-p early-config)
-    (message "LOADING EARLY CONFIG")
+    (message "LOADING EARLY CONFIG FROM %s" early-config)
     (load early-config nil 'nomessage)))
 
 (setq gc-cons-threshold (* 100 1000 1000))
@@ -67,6 +71,7 @@
 
 ;; Set a default font early to prevent frame resizing.
 ;; This should match the font loaded by your theme.
+;; TODO should go in neo-devel-early-init-config
 (set-face-attribute 'default nil :family "Noto Mono" :height 120)
 
 ;; Load early frame settings if available

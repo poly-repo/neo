@@ -3,6 +3,8 @@
 (require 'map)
 (require 'neo-extensions)
 
+(message "neo/use-extensions %s" neo/use-extensions)
+
 ;; TODO: resolve the mess w/ :ensure-system-packages
 
 ;;; NOTE this first definition wins so that we don't have to remember
@@ -169,8 +171,9 @@ That corresponds to the publisher of an extension."
 (defmacro neo/use-package (name &rest args)
   "Augment `use-package` with Neo-specific tracking and filtering.
 
-Stores the raw `use-package` form in `neo--enabled-packages`
-indexed by (user . extension-base-name)."
+If the global variable neo/use-extensions is t, the use-package is
+immediately executed, otherwise the raw `use-package` form is stored in
+`neo--enabled-packages` indexed by (user . extension-base-name)."
   (declare (indent defun))
   (message (format "Definition of package %s [%s:%s]" name (neo--author-name) (file-name-base (or load-file-name buffer-file-name "unknown"))))
   (let* ((ensure (if (string= name "emacs") (list :ensure nil) '()))
@@ -182,10 +185,12 @@ indexed by (user . extension-base-name)."
          (key (cons user extension))
          (real-form `(use-package ,name ,@args))
          (existing (alist-get key neo--enabled-packages nil nil #'equal)))
-    ;; Store the raw form, not the expanded one
-    `(setq neo--enabled-packages
-           (cons (cons ',key (cons ',real-form ',existing))
-                 (assq-delete-all ',key neo--enabled-packages)))))
+    (if neo/use-extensions
+	;; Store the raw form, not the expanded one
+	`(setq neo--enabled-packages
+               (cons (cons ',key (cons ',real-form ',existing))
+                     (assq-delete-all ',key neo--enabled-packages)))
+      `(eval ',real-form))))
 
 (setopt package-archives
         '(("gnu" . "https://elpa.gnu.org/packages/")

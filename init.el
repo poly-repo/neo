@@ -22,6 +22,9 @@
 ;; (defvar neo/cache-directory)
 ;; (defvar neo/config-directory)
 
+(message "NEO CACHE DIRECTORY %s" neo/cache-directory)
+(message "NEO CONFIG DIRECTORY %s" neo/config-directory)
+
 (eval-and-compile
   (defvar no-littering-etc-directory
     (expand-file-name ".litter/config" user-emacs-directory))
