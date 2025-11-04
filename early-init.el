@@ -57,6 +57,8 @@
     (message "LOADING EARLY CONFIG FROM %s" early-config)
     (load early-config nil 'nomessage)))
 
+;(scroll-bar-mode -1)
+
 (setq gc-cons-threshold (* 100 1000 1000))
 (setq inhibit-compacting-font-caches t)
 

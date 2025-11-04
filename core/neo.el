@@ -1,5 +1,5 @@
 ;;;###autoload
-(defvar neo/use-extensions nil
+(defvar neo/use-extensions  nil
   "When t we use neo extension mechanism. nil make immediate use of use-package")
 
 
@@ -20,15 +20,20 @@
   '("neo:questionable-defaults"
     "neo:modeline"
     "neo:ui"
+    "neo:compsel"
     "neo:session"
     "neo:org"
+    "neo:news"
     "neo:terminal"
     "neo:versions"
     "neo:build"
-;;    "neo:lsp"
-;;    "neo:python"
+    "neo:lsp"
+    "neo:python"
+    "neo:c++"
+    "neo:elisp"
     "neo:leetcode"
-;;    "neo:ai"
+    "neo:ai"
+    "neo:writer"
     )
   "Temporary list of extensions to load.")
 

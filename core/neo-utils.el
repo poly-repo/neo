@@ -179,7 +179,7 @@ Returns the absolute expanded path to DIR."
     full-dir))
 
 (defun neo/native-cache (package)
-  (let ((dir (neo/path-join "~/.cache" "neo" emacs-version package)))
+  (let ((dir (neo/path-join "~/.cache" (neo/get-emacs-instance-name) emacs-version package)))
     (neo/ensure-directory-exists dir)))
 
 (require 'color)
