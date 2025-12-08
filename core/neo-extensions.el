@@ -538,7 +538,7 @@ Temporarily adds the file's directory to `load-path` so `require` works."
          (name      (neo--normalize-name (neo/extension-name ext)))
          (base      (expand-file-name "extensions/extensions/" user-emacs-directory))
          (file-dir  (expand-file-name (format "%s/%s" publisher name) base))
-         (file      (expand-file-name (format "%s.el" name) file-dir)))
+         (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
     (message "[neo] Loading %s/%s from %s" publisher name file)
     (let ((res
            (condition-case err
