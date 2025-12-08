@@ -55,8 +55,6 @@ If SLUG is provided, a `neo/extension-slug` object, only replays that entry."
                   (and (equal user (car key))
                        (equal extension (cdr key))))
           (dolist (form forms)
-	    (message "----------")
-	    (pp-display-expression form "*Messages*")
             (eval form)))))))
 
 ;;; TODO: figure out where duplicate packages get queued
