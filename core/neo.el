@@ -16,16 +16,6 @@
 
 (setq neo--framework (neo--framework-instance))
 
-;; TODO probably need to be moved to neo-framework and renamed maybe 'bootstrap'.
-(defun test ()
-  "A test function to install and load the 'full-monty' extension set.
-This is intended for development and debugging purposes."
-  (interactive)
-  
-  (let ((extensions (neo/topo-sort-from-roots (neo-framework-available-extensions neo--framework)
-					      '("neo:full-monty"))))
-    (neo/install-extensions-from-slugs neo--framework extensions))
-  (neo/load-installed-extensions neo--framework)
-  (neo/replay-installed-extensions-packages neo--framework))
+(neo/bootstrap neo--framework)
 
 (provide 'neo)

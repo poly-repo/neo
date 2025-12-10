@@ -36,6 +36,16 @@ If no cache exists, create empty hash tables for the slots."
     (message "Adding %s" slug-string)
     (puthash slug-string installation installed)))
 
+;; TODO for now we force neo:full-monty
+(defun neo/bootstrap (framework)
+  ;; TODO probably need to be moved to neo-framework and renamed maybe 'bootstrap'.
+  (let ((extensions (neo/topo-sort-from-roots (neo-framework-available-extensions framework)
+					      '("neo:full-monty"))))
+    (neo/install-extensions-from-slugs framework extensions))
+  (neo/load-installed-extensions framework)
+  (neo/replay-installed-extensions-packages framework))
+
+  
 ;; This is a temporary function that will be made unnecessary when the UI can
 ;; select extensions to be installed and we're able to persist and retrieve that
 ;; selection.
