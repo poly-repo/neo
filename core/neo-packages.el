@@ -65,8 +65,8 @@ If SLUG is provided, a `neo/extension-slug` object, only replays that entry."
 ;(setq warning-minimum-level :error)
 
 ;; TODO add somewhere  a check for minimal emacs version
-(neo/use-package which-key
-  :builtin
+(use-package which-key
+  :ensure t
   :custom
   (which-key-add-column-padding 2)
   (which-key-allow-multiple-replacements t)
@@ -76,5 +76,23 @@ If SLUG is provided, a `neo/extension-slug` object, only replays that entry."
   (which-key-side-window-slot -10))
 
 ;(neo/replay-extension-packages)
+
+;; probably need to ensure it is run early
+(use-package no-littering
+  :ensure t
+  :init
+  ;; We define these in early-init.el so everything can be kept out of the way
+  ;; in particular elpaca and eln-cache
+  ;(setq no-littering-etc-directory (expand-file-name ".litter/config" user-emacs-directory))
+  ;(setq no-littering-var-directory (expand-file-name ".litter/data" user-emacs-directory))
+  (setq custom-file
+        (expand-file-name "custom.el" no-littering-var-directory))
+  :config
+  (no-littering-theme-backups)
+  (setq auto-save-file-name-transforms
+        `((".*"
+           ,(no-littering-expand-var-file-name "auto-save/")
+           t))))
+
 
 (provide 'neo-packages)
