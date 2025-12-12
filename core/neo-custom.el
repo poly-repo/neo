@@ -11,4 +11,8 @@
   "Customization options for Neo extensions"
   :group 'neo)
 
+(defgroup neo-ui nil
+  "Customization options for Neo UI elements"
+  :group 'neo)
+
 (provide 'neo-custom)

@@ -21,7 +21,8 @@
 	    (message "Result length: %d" (length results))
             (let* ((manifest-file (expand-file-name "manifest.el" dir2))
                    (emblem-file (expand-file-name "emblem64.png" dir2)))
-              (when (file-exists-p manifest-file)
+              (if (not (file-exists-p manifest-file))
+		  (message "Manifest not found")
 		(message "Manifest found")
                 (let* ((form (neo--load-manifest manifest-file))
                        (args (if (and (listp form) (eq (car form) 'neo/extension))
@@ -138,7 +139,8 @@ Returns the absolute path of the newly-created output directory."
   (interactive)
   ;; TODO check we're inside Omega
   (when-let* ((output-base-dir (format "~/.cache/%s/extensions" (neo/get-emacs-instance-name)))
-	      (current-project (neo--project-root))
+;	      (current-project (neo--project-root))
+	      (current-project "~/.local/share/wtrees/omega_mav-58-neo-ui")
 	      (input-dir (expand-file-name "devex/editors/emacs/extensions/extensions" current-project)))
     (neo--create-local-extensions-digest input-dir output-base-dir)))
 

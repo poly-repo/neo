@@ -64,19 +64,6 @@ If SLUG is provided, a `neo/extension-slug` object, only replays that entry."
 ;;; ⛔ Warning (emacs): Duplicate item queued: org-roam
 ;(setq warning-minimum-level :error)
 
-;; TODO add somewhere  a check for minimal emacs version
-(use-package which-key
-  :ensure t
-  :custom
-  (which-key-add-column-padding 2)
-  (which-key-allow-multiple-replacements t)
-  (which-key-idle-delay 0.8)
-  (which-key-min-display-lines 6)
-  (which-key-mode t)
-  (which-key-side-window-slot -10))
-
-;(neo/replay-extension-packages)
-
 ;; probably need to ensure it is run early
 (use-package no-littering
   :ensure t
