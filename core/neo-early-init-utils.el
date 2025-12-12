@@ -57,15 +57,18 @@ distinguishing between missing and unreadable files."
              (if success "success" "failure (ignored)"))
     success))
 
+(defun neo/config-file-path (filename)
+  (let* ((current-profile (expand-file-name "current-profile"
+                                            neo/config-directory))
+         (absolute-path (expand-file-name filename current-profile)))
+    absolute-path))
+  
 (defun neo/load-config-file (filename &optional failure-ok)
   "Load FILENAME from the current profile directory.
 
 Returns t on success, nil on failure (if FAILURE-OK is non-nil), and
 signals otherwise. Delegates to `neo/load-file`."
-  (let* ((current-profile (expand-file-name "current-profile"
-                                            neo/config-directory))
-         (absolute-path (expand-file-name filename current-profile)))
-    (neo/load-file absolute-path failure-ok)))
+  (neo/load-file (neo/config-file-path filename) failure-ok))
 
 (defun neo/load-cached-file (filename &optional failure-ok)
   "Load FILENAME from `neo/cache-directory`.
@@ -73,6 +76,7 @@ signals otherwise. Delegates to `neo/load-file`."
 Returns t on success, nil on failure (if FAILURE-OK is non-nil), and
 signals otherwise. Delegates to `neo/load-file`."
   (let ((absolute-path (expand-file-name filename neo/cache-directory)))
+    (message "LOADING: %s" absolute-path)
     (neo/load-file absolute-path failure-ok)))
 
 (defun neo/paraphenalia (thing)

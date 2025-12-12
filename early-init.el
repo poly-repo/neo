@@ -42,6 +42,7 @@
           emacs-minor-version)
   neo/cache-directory))
 
+(neo/load-config-file "initial-frame-properties.el" t)
 
 ;; TODO when no existing config is found, we would like to show a
 ;; pristine Emacs splash screen.  Unfortunately in those conditions
@@ -69,7 +70,6 @@
   (defun startup-echo-area-message () "")
   (defun display-startup-echo-area-message () nil))
 
-(neo/load-config-file "initial-frame-properties.el" t)
 
 (setq gc-cons-threshold (* 100 1000 1000))
 (setq inhibit-compacting-font-caches t)
