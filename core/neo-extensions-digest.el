@@ -140,7 +140,7 @@ Returns the absolute path of the newly-created output directory."
   ;; TODO check we're inside Omega
   (when-let* ((output-base-dir (format "~/.cache/%s/extensions" (neo/get-emacs-instance-name)))
 ;	      (current-project (neo--project-root))
-	      (current-project "~/.local/share/wtrees/omega_mav-58-neo-ui")
+	      (current-project "~/.local/share/wtrees/omega_mav-62-project")
 	      (input-dir (expand-file-name "devex/editors/emacs/extensions/extensions" current-project)))
     (neo--create-local-extensions-digest input-dir output-base-dir)))
 
