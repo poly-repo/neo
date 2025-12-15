@@ -134,13 +134,33 @@ Returns the absolute path of the newly-created output directory."
 (defun neo--create-github-extensions-digest (source-dir output-base-dir)
   (message "TODO"))
 
+(defun neo/check-emacs-wtree ()
+  "Verify that `user-emacs-directory` is inside a valid devex Emacs wtree.
+
+Expected form:
+  $HOME/.local/share/wtrees/*/devex/editors/emacs/
+
+Errors out if not inside such a path. Returns the wtree root:
+  $HOME/.local/share/wtrees/*"
+  (let* ((home (expand-file-name "~"))
+         (path user-emacs-directory)
+         ;; Regex for: $HOME/.local/share/wtrees/<any>/devex/editors/emacs/
+         (regex (concat "^" (regexp-quote (expand-file-name ".local/share/wtrees/" home))
+                        "\\([^/]+\\)/devex/editors/emacs/?$"))
+         (match (string-match regex path)))
+    (if match
+        ;; Return the $HOME/.local/share/wtrees/* part
+        (concat (expand-file-name ".local/share/wtrees/" home)
+                (match-string 1 path))
+      (user-error "Emacs is not running in a recognized devex Emacs wtree (got %s)" path))))
+
+
 ;; TODO we should probably create/update the current symlink
 (defun neo/create-local-extension-digest ()
   (interactive)
   ;; TODO check we're inside Omega
   (when-let* ((output-base-dir (format "~/.cache/%s/extensions" (neo/get-emacs-instance-name)))
-;	      (current-project (neo--project-root))
-	      (current-project "~/.local/share/wtrees/omega_mav-62-project")
+	      (current-project (neo/check-emacs-wtree))
 	      (input-dir (expand-file-name "devex/editors/emacs/extensions/extensions" current-project)))
     (neo--create-local-extensions-digest input-dir output-base-dir)))
 
