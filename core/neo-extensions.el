@@ -431,16 +431,16 @@ This returns the list of reachable keys (order unspecified)."
                       (if (gethash r ht)
                           (push r stack)
                         (pcase on-missing
-                          ('error (error "neo: %s requires missing %s" k r))
-                          ('warn  (message "neo: warning: %s requires missing %s (ignored)" k r))
+                          ('error (neo/log-error 'core "neo: %s requires missing %s" k r))
+                          ('warn  (neo/log-info 'core "neo: warning: %s requires missing %s (ignored)" k r))
                           ('ignore nil)
-                          (_ (error "neo--collect-reachable: unknown :on-missing %S" on-missing))))))))
+                          (_ (neo/log-error 'core "neo--collect-reachable: unknown :on-missing %S" on-missing))))))))
             ;; k itself absent from ht — treat according to on-missing:
             (pcase on-missing
-              ('error (error "neo: starting node %s not present in table" k))
-              ('warn  (message "neo: warning: starting node %s not present (ignored)" k))
+              ('error (neo/log-error 'core "neo: starting node %s not present in table" k))
+              ('warn  (neo/log-info 'core "neo: warning: starting node %s not present (ignored)" k))
               ('ignore nil)
-              (_ (error "neo--collect-reachable: unknown :on-missing %S" on-missing)))))))
+              (_ (neo/log-error 'core "neo--collect-reachable: unknown :on-missing %S" on-missing)))))))
     ;; collect keys from 'seen' that are present in ht (if absent we either errored or ignored)
     (mapcar #'car
             (cl-remove-if-not
@@ -503,15 +503,15 @@ on :on-cycle (see above)."
       (if (/= (length result-keys) (length reachable))
           (let* ((remaining (cl-remove-if (lambda (k) (member k result-keys)) reachable)))
             (pcase on-cycle
-              ('error (error "neo/topo-sort-from-roots: cycle detected among: %S" remaining))
-              ('warn  (message "neo/topo-sort-from-roots: cycle detected among: %S (returning partial order)" remaining)
+              ('error (neo/log-error 'core "neo/topo-sort-from-roots: cycle detected among: %S" remaining))
+              ('warn  (neo/log-info 'core "neo/topo-sort-from-roots: cycle detected among: %S (returning partial order)" remaining)
                       (if (eq ret-kind 'structs)
                           (mapcar (lambda (k) (gethash k ht)) result-keys)
                         result-keys))
               ('ignore (if (eq ret-kind 'structs)
                            (mapcar (lambda (k) (gethash k ht)) result-keys)
                          result-keys))
-              (_ (error "neo/topo-sort-from-roots: unknown :on-cycle %S" on-cycle))))
+              (_ (neo/log-error "neo/topo-sort-from-roots: unknown :on-cycle %S" on-cycle))))
         ;; success: return requested kind
         (if (eq ret-kind 'structs)
             (mapcar (lambda (k) (gethash k ht)) result-keys)
@@ -530,35 +530,60 @@ on :on-cycle (see above)."
 ;; TODO here we cheat and relay on the fact that for testing we have
 ;; the user-emacs-directory pointing into the repo. But this means we
 ;; have two levels of 'extensions'
+;; (defun neo--load-extension (ext)
+;;   "Load the extension file for EXT.
+;; Logs errors to *Messages* but never signals. Returns non-nil on success.
+;; Temporarily adds the file's directory to `load-path` so `require` works."
+;;   (let* ((publisher (neo/extension-publisher ext))
+;;          (name      (neo--normalize-name (neo/extension-name ext)))
+;;          (base      (expand-file-name "extensions/extensions/" user-emacs-directory))
+;;          (file-dir  (expand-file-name (format "%s/%s" publisher name) base))
+;;          (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
+;;     (let ((res
+;;            (condition-case err
+;;                ;; Temporarily add file-dir to load-path
+;;                (let ((load-path (cons file-dir load-path)))
+;;                  ;; NOERROR=t prevents file-not-found from signaling.
+;;                  ;; NOMESSAGE='nomessage keeps `load` quiet; we log ourselves.
+;;                  (load file t 'nomessage 'nosuffix))
+;;              (error
+;;               (message "[neo] Error while loading %s: %s"
+;;                        file (error-message-string err))
+;;               :error))))
+;;       (cond
+;;        ((eq res :error) nil)
+;;        ((null res)
+;;         (neo/log-warn "[neo] Extension file not found: %s" file)
+;;         nil)
+;;        (t
+;;         (neo/log-info "[neo] Loaded %s" file)
+;;         t)))))
+
+;; TODO here we cheat and relay on the fact that for testing we have
+;; the user-emacs-directory pointing into the repo. But this means we
+;; have two levels of 'extensions'
 (defun neo--load-extension (ext)
   "Load the extension file for EXT.
-Logs errors to *Messages* but never signals. Returns non-nil on success.
-Temporarily adds the file's directory to `load-path` so `require` works."
+
+Missing files are ignored.
+If the file exists but errors during load, the error is signaled.
+
+Returns non-nil on successful load, nil if file does not exist."
   (let* ((publisher (neo/extension-publisher ext))
          (name      (neo--normalize-name (neo/extension-name ext)))
          (base      (expand-file-name "extensions/extensions/" user-emacs-directory))
          (file-dir  (expand-file-name (format "%s/%s" publisher name) base))
          (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
-    (message "[neo] Loading %s/%s from %s" publisher name file)
-    (let ((res
-           (condition-case err
-               ;; Temporarily add file-dir to load-path
-               (let ((load-path (cons file-dir load-path)))
-                 ;; NOERROR=t prevents file-not-found from signaling.
-                 ;; NOMESSAGE='nomessage keeps `load` quiet; we log ourselves.
-                 (load file t 'nomessage 'nosuffix))
-             (error
-              (message "[neo] Error while loading %s: %s"
-                       file (error-message-string err))
-              :error))))
-      (cond
-       ((eq res :error) nil)
-       ((null res)
-        (message "[neo] Extension file not found: %s" file)
-        nil)
-       (t
-        (message "[neo] Loaded %s" file)
-        t)))))
+    (if (not (file-exists-p file))
+	nil
+       ;; (progn
+       ;;    (neo/log-warn "[neo] Extension file not found: %s" file)
+       ;;    nil)
+      ;; File exists → errors must signal
+      (let ((load-path (cons file-dir load-path)))
+        (load file nil 'nomessage 'nosuffix)
+;        (neo/log-info "[neo] Loaded %s" file)
+        t))))
 
 
 (defun neo/load-extensions (installed-extensions)
@@ -570,12 +595,12 @@ of `neo/installation` objects. It looks up each extension by its slug in the
     (let* ((slug (neo/installation-extension-slug installation))
            (slug-string (neo/extension-slug-to-string slug))
            (extension (gethash slug-string neo--extensions)))
-      (message "Attempting to load extension with slug: '%s'" slug-string)
+      (neo/log-info 'core "Attempting to load extension with slug: '%s'" slug-string)
       (if extension
           (progn
-            (message "  -> Found, loading '%s'" (neo/extension-title extension))
+            (neo/log-info 'core "  -> Found, loading '%s'" (neo/extension-title extension))
             (neo--load-extension extension))
-        (message "  -> Warning: Extension with slug '%s' not found in registry." slug-string)))))
+        (neo/log-warn "  -> Warning: Extension with slug '%s' not found in registry." slug-string)))))
 
 ;; TODO only fetch if older than X hours unless FORCE is used
 (defun neo/fetch-extensions ()

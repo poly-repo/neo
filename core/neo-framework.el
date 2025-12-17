@@ -33,7 +33,8 @@ If no cache exists, create empty hash tables for the slots."
   (let* ((installed (neo-framework-installed-extensions framework))
          (slug (neo/installation-extension-slug installation))
          (slug-string (neo/extension-slug-to-string slug)))
-    (message "Adding %s" slug-string)
+    (neo/log-info 'core "Adding %s" slug-string)
+;    (message "Adding %s" slug-string)
     (puthash slug-string installation installed)))
 
 ;; TODO for now we force neo:full-monty
@@ -77,12 +78,11 @@ in 'publisher:name' format."
        (let* ((slug (neo/installation-extension-slug installation))
               (slug-string (neo/extension-slug-to-string slug))
               (extension (gethash slug-string available)))
-         (message "Attempting to load extension with slug: '%s'" slug-string)
-         (if extension
-             (progn
-               (message "  -> Found, loading '%s'" (neo/extension-title extension))
-               (neo--load-extension extension))
-           (message "  -> Warning: Extension with slug '%s' not found in registry." slug-string))))
+         (when extension
+	   (neo/log-info 'core "Loading extension %s" slug-string)
+           (if (neo--load-extension extension)
+	       (neo/log-info 'core "  ✔️ Loaded '%s'" (neo/extension-title extension))
+	     (neo/log-warn 'core "  ❌ Extension %s not found" slug-string)))))
      installed)))
 
 (cl-defgeneric neo/replay-installed-extensions-packages (framework)
