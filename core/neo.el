@@ -12,6 +12,7 @@
 
 (neo--require 'neo-custom)			; customization groups
 (neo--require 'neo-packages)			; package management
+(neo--require 'neo-logging)
 (neo--require 'neo-framework)			; neo infra and core extension management
 
 (setq neo--framework (neo--framework-instance))
