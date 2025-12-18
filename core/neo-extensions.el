@@ -53,12 +53,22 @@
           (neo/extension-slug-publisher slug)
           (neo/extension-slug-name slug)))
 
+
+(defun neo/extension-feature-symbol (slug-or-string)
+  (let* ((slug-string (if (neo/extension-slug-p slug-or-string) (neo/extension-slug-to-string slug-or-string) slug-or-string)))
+    (cl-destructuring-bind (publisher name)
+	(split-string slug-string ":" t)
+      (intern (format "neo-extension-%s-%s" publisher name)))))
+
 (defun neo/make-extension-slug-from-string (slug-string)
   "Create a `neo/extension-slug` from a string like 'publisher:name'."
   (let* ((parts (split-string slug-string ":" t)))
     (unless (= (length parts) 2)
       (error "Invalid extension slug format: %s. Expected 'publisher:name'." slug-string))
     (make-neo/extension-slug :publisher (car parts) :name (cadr parts))))
+
+(defun neo/extensionp (feature)
+  (featurep (neo/extension-feature-symbol feature)))
 
 (cl-defstruct neo/installation
   "Represents an installed extension."
@@ -481,10 +491,21 @@ on :on-cycle (see above)."
     ;; build edges restricted to reachable nodes
     (dolist (k reachable)
       (let* ((ext (gethash k ht))
-             (reqs (neo--normalize-requires (and ext (neo/extension-requires ext)))))
-        (dolist (r reqs)
+	     ;; TODO normalize-requires is not a precise name any more as we use it for depends-on as well
+	     ;; maybe normalize-dependencies
+             (reqs (neo--normalize-requires (and ext (neo/extension-requires ext))))
+	     (depends-on (neo--normalize-requires (and ext (neo/extension-depends-on ext)))))
+	;; NOTE: here we can simply concatenate reqs and depends
+	;; on. neo--collect-reachable has already inserted the
+	;; transitive closure of what is :required (and errored out if
+	;; something is missing). Now we just go over the union of
+	;; required and depend on and add dependency edges only if
+	;; what is in the list is actually present, which is the
+	;; behavior we want from :depend-on
+        (dolist (r (append reqs depends-on))
           ;; r might not be in reachable (it will be if present in ht and was discovered),
           ;; if r is missing we already handled it in the collection phase per on-missing
+	  ;; but we're ok w/ :depend-on, as explained earlier
           (when (and (gethash r ht) (gethash r indegree)) ; r present and within reachable set
             (puthash r (cons k (gethash r succs)) succs)
             (puthash k (1+ (gethash k indegree)) indegree)))))
