@@ -81,7 +81,10 @@ in 'publisher:name' format."
          (when extension
 	   (neo/log-info 'core "Loading extension %s" slug-string)
            (if (neo--load-extension extension)
-	       (neo/log-info 'core "  ✔️ Loaded '%s'" (neo/extension-title extension))
+	       (progn
+		 (neo/log-info 'core "  ✔️ Loaded '%s'" (neo/extension-title extension))
+		 (provide (neo/extension-feature-symbol slug)))
+;		 (provide (intern (format "neo-extension-%s-%s" (neo/extension-slug-publisher slug) (neo/extension-slug-name slug)))))
 	     (neo/log-warn 'core "  ❌ Extension %s not found" slug-string)))))
      installed)))
 
