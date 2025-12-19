@@ -70,12 +70,15 @@ Returns t on success, nil on failure (if FAILURE-OK is non-nil), and
 signals otherwise. Delegates to `neo/load-file`."
   (neo/load-file (neo/config-file-path filename) failure-ok))
 
+(defun neo/cache-file-path (filename)
+  (expand-file-name filename neo/cache-directory))
+
 (defun neo/load-cached-file (filename &optional failure-ok)
   "Load FILENAME from `neo/cache-directory`.
 
 Returns t on success, nil on failure (if FAILURE-OK is non-nil), and
 signals otherwise. Delegates to `neo/load-file`."
-  (let ((absolute-path (expand-file-name filename neo/cache-directory)))
+  (let ((absolute-path (neo/cache-file-path filename)))
     (message "LOADING: %s" absolute-path)
     (neo/load-file absolute-path failure-ok)))
 
