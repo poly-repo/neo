@@ -134,26 +134,65 @@ Returns the absolute path of the newly-created output directory."
 (defun neo--create-github-extensions-digest (source-dir output-base-dir)
   (message "TODO"))
 
-(defun neo/check-emacs-wtree ()
-  "Verify that `user-emacs-directory` is inside a valid devex Emacs wtree.
+;; (defun neo/check-emacs-wtree ()
+;;   "Verify that `user-emacs-directory` is inside a valid devex Emacs wtree.
 
-Expected form:
+;; Expected form:
+;;   $HOME/.local/share/wtrees/*/devex/editors/emacs/
+
+;; Errors out if not inside such a path. Returns the wtree root:
+;;   $HOME/.local/share/wtrees/*"
+;;   (let* ((home (expand-file-name "~"))
+;;          (path user-emacs-directory)
+;;          ;; Regex for: $HOME/.local/share/wtrees/<any>/devex/editors/emacs/
+;;          (regex (concat "^" (regexp-quote (expand-file-name ".local/share/wtrees/" home))
+;;                         "\\([^/]+\\)/devex/editors/emacs/?$"))
+;;          (match (string-match regex path)))
+;;     (if match
+;;         ;; Return the $HOME/.local/share/wtrees/* part
+;;         (concat (expand-file-name ".local/share/wtrees/" home)
+;;                 (match-string 1 path))
+;;       (user-error "Emacs is not running in a recognized devex Emacs wtree (got %s)" path))))
+
+(defun neo/check-emacs-wtree ()
+  "Verify that Emacs is inside a valid devex Emacs wtree.
+
+If `projectile-project-root` is set, it is assumed to already be
+the wtree root:
+
+  $HOME/.local/share/wtrees/*/
+
+Otherwise, fall back to `user-emacs-directory`, which must be:
+
   $HOME/.local/share/wtrees/*/devex/editors/emacs/
 
-Errors out if not inside such a path. Returns the wtree root:
-  $HOME/.local/share/wtrees/*"
-  (let* ((home (expand-file-name "~"))
-         (path user-emacs-directory)
-         ;; Regex for: $HOME/.local/share/wtrees/<any>/devex/editors/emacs/
-         (regex (concat "^" (regexp-quote (expand-file-name ".local/share/wtrees/" home))
-                        "\\([^/]+\\)/devex/editors/emacs/?$"))
-         (match (string-match regex path)))
-    (if match
-        ;; Return the $HOME/.local/share/wtrees/* part
-        (concat (expand-file-name ".local/share/wtrees/" home)
-                (match-string 1 path))
-      (user-error "Emacs is not running in a recognized devex Emacs wtree (got %s)" path))))
+Returns the wtree root:
+  $HOME/.local/share/wtrees/*
 
+Errors out if neither form matches."
+  (let* ((home (expand-file-name "~"))
+         (wtree-base (expand-file-name ".local/share/wtrees/" home))
+         (project-root (ignore-errors (projectile-project-root)))
+         ;; $HOME/.local/share/wtrees/<name>/
+         (wtree-root-regex
+          (concat "^" (regexp-quote wtree-base) "\\([^/]+\\)/?$"))
+         ;; $HOME/.local/share/wtrees/<name>/devex/editors/emacs/
+         (emacs-dir-regex
+          (concat "^" (regexp-quote wtree-base)
+                  "\\([^/]+\\)/devex/editors/emacs/?$")))
+    (cond
+     ((and project-root
+           (string-match wtree-root-regex (expand-file-name project-root)))
+      (expand-file-name project-root))
+
+     ((string-match emacs-dir-regex
+                    (expand-file-name user-emacs-directory))
+      (concat wtree-base (match-string 1 user-emacs-directory)))
+
+     (t
+      (user-error
+       "Emacs is not running in a recognized devex wtree (project=%S, emacs-dir=%s)"
+       project-root user-emacs-directory)))))
 
 ;; TODO we should probably create/update the current symlink
 (defun neo/create-local-extension-digest ()
