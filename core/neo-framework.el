@@ -12,6 +12,9 @@
 (defvar neo--framework nil
   "Singleton `neo-framework' instance. Use `neo/framework-instance' to access.")
 
+(defvar neo/after-framework-bootstrap-hook nil
+  "Hook run after the Neo framework has finished bootstrapping.")
+
 (defun neo--make-framework-from-cache (&optional instance)
   "Create a `neo-framework' populated from cache for INSTANCE.
 If no cache exists, create empty hash tables for the slots."
@@ -98,7 +101,8 @@ in 'publisher:name' format."
      (lambda (_slug installation)
        (let ((slug (neo/installation-extension-slug installation)))
          (neo/replay-extension-packages slug)))
-     installed)))
+     installed))
+  (run-hooks 'neo/after-framework-bootstrap-hook))
 
 (cl-defgeneric neo/render-debug-info (framework)
   "Render debug info for FRAMEWORK into a buffer.")
