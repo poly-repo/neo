@@ -64,24 +64,6 @@
     ;; Prevent coding-system munging / newline conversion
     (write-region content nil file nil 0)))
 
-;; maybe should go to utils
-(defun neo--project-root ()
-  "Return the root directory of the current project, or nil."
-  (when-let* ((pr (project-current)))
-    (project-root pr)))
-
-;; (defun neo--create-local-extensions-digest (source-dir output-base-dir)
-;;   (if (not (file-directory-p source-dir))
-;;       (error "Source directory '%s' does not exist, cannot generate extension digest" source-dir)
-;;     (let* ((extensions (neo--collect-extension-forms source-dir))
-;; 	   (decorated-extensions (neo--serialize-extensions extensions))
-;; 	   (sha256 (neo--compute-sha256-of-string decorated-extensions))
-;; 	   (output-dir (expand-file-name sha256 output-base-dir))
-;; 	   (output-file (expand-file-name "extensions.el" output-dir)))
-;;       (message "output-dir %s" output-dir)
-;;       (make-directory output-dir t)
-;;       (neo--write-extension-file extensions output-file))))
-
 (defun neo--create-local-extensions-digest (source-dir output-base-dir)
   "Generate a digest of extensions from SOURCE-DIR under OUTPUT-BASE-DIR.
 
