@@ -91,6 +91,12 @@ in 'publisher:name' format."
 	     (neo/log-warn 'core "  ❌ Extension %s not found" slug-string)))))
      installed)))
 
+(cl-defgeneric neo/get-extension (framework slug)
+  "Load all installed extensions for FRAMEWORK.")
+
+(cl-defmethod neo/get-extension ((framework neo-framework) slug)
+  (gethash slug (neo-framework-available-extensions framework)))
+
 (cl-defgeneric neo/replay-installed-extensions-packages (framework)
   "Replay package configurations for all installed extensions in FRAMEWORK.")
 

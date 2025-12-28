@@ -606,6 +606,64 @@ Returns non-nil on successful load, nil if file does not exist."
 ;        (neo/log-info "[neo] Loaded %s" file)
         t))))
 
+(require 'cl-macs) ; for cl-macrolet
+
+
+(defun neo/load-with-dummy-use-package (file dummy-use-package)
+  "Load FILE, overriding `neo/use-package' to just print the first argument.
+The original `neo/use-package' is restored afterwards."
+  (let ((orig (symbol-function 'neo/use-package)))
+    (unwind-protect
+        (progn
+          ;; Define a dummy macro globally
+          (defmacro neo/use-package (name &rest _args)
+            `(funcall ,dummy-use-package ',name))
+          ;; Load the file
+          (load file nil 'nomessage 'nosuffix))
+      ;; Restore original macro
+      (fset 'neo/use-package orig))))
+
+
+;; (defun neo/refresh-package-archives ()
+;;   (unless (and (boundp 'package-archive-contents)
+;;                package-archive-contents)
+;;     (let ((package-user-dir
+;; 	   (expand-file-name "emacs/package.el/"
+;;                              (or (getenv "XDG_CACHE_HOME")
+;; 				 "~/.cache"))))
+;;       (package-refresh-contents))))
+
+(defun neo/refresh-package-archives ()
+  (unless (and (boundp 'package-archive-contents)
+               package-archive-contents)
+    (let ((package-user-dir (neo/cache-file-path "elpa-packages")))
+      (package-refresh-contents))))
+
+(defun neo/find-package-desc (pkg-name)
+  "Return the `package-desc` object for PKG-NAME, or nil if not found."
+  (cdr (assoc pkg-name package-archive-contents)))
+
+(defun neo--get-extension-info (ext)
+  "Return an alist of (package-name . package-desc) for all packages used by EXT."
+  (neo/refresh-package-archives)
+  (let* ((publisher (neo/extension-publisher ext))
+         (name      (neo--normalize-name (neo/extension-name ext)))
+         (base      (expand-file-name "extensions/extensions/" user-emacs-directory))
+         (file-dir  (expand-file-name (format "%s/%s" publisher name) base))
+         (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
+    (when (file-exists-p file)
+      (let ((load-path (cons file-dir load-path))
+            (used-packages '()))
+        ;; load the extension, collecting package-name . package-desc alist
+        (neo/load-with-dummy-use-package
+         file
+         (lambda (pkg)
+           (push (cons (symbol-name pkg)
+                       (neo/find-package-desc pkg))
+                 used-packages)))
+        ;; reverse so order matches original
+        (reverse used-packages)))))
+
 
 (defun neo/load-extensions (installed-extensions)
   "Load extensions specified in INSTALLED-EXTENSIONS.
