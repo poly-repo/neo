@@ -22,6 +22,8 @@
 ;; (defvar neo/cache-directory)
 ;; (defvar neo/config-directory)
 
+;; trivial comment for CI testing. Remove next time this file is touched. Or not.
+
 (defvar neo/minimum-emacs-version "30.1")
 
 (unless (version<= neo/minimum-emacs-version emacs-version)
