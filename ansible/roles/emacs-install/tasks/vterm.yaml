@@ -1,0 +1,38 @@
+- name: Ensure vterm install directory exists
+  file:
+    path: "{{ vterm_install_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Clone emacs-libvterm
+  git:
+    repo: "{{ vterm_repo }}"
+    dest: "{{ vterm_src_dir }}"
+    depth: 1
+    update: yes
+
+- name: Ensure build directory exists
+  file:
+    path: "{{ vterm_build_dir }}"
+    state: directory
+
+- name: Configure vterm
+  command: >
+    cmake
+    -DUSE_SYSTEM_LIBVTERM={{ vterm_use_system_libvterm | ternary('yes','no') }}
+    ..
+  args:
+    chdir: "{{ vterm_build_dir }}"
+    creates: "{{ vterm_build_dir }}/Makefile"
+
+- name: Build vterm module
+  command: make
+  args:
+    chdir: "{{ vterm_build_dir }}"
+    creates: "{{ vterm_src_dir }}/vterm-module.so"
+
+- name: Install vterm-module.so
+  copy:
+    src: "{{ vterm_src_dir }}/vterm-module.so"
+    dest: "{{ vterm_install_dir }}/vterm-module.so"
+    mode: "0755"
