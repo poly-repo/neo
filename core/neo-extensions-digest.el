@@ -177,13 +177,30 @@ Errors out if neither form matches."
        project-root user-emacs-directory)))))
 
 ;; TODO we should probably create/update the current symlink
-(defun neo/create-local-extension-digest ()
-  (interactive)
-  ;; TODO check we're inside Omega
-  (when-let* ((output-base-dir (format "~/.cache/%s/extensions" (neo/get-emacs-instance-name)))
-	      (current-project (neo/check-emacs-wtree))
-	      (input-dir (expand-file-name "devex/editors/emacs/extensions/extensions" current-project)))
-    (neo--create-local-extensions-digest input-dir output-base-dir)))
+(defun neo/create-local-extension-digest (arg)
+  (interactive "P")
+  (if (not arg)
+      (neo/create-development-extension-digest)
+    ;; TODO check we're inside Omega
+    (when-let* ((output-base-dir (format "~/.cache/%s/extensions" (neo/get-emacs-instance-name)))
+		(current-project (neo/check-emacs-wtree))
+		(input-dir (expand-file-name "devex/editors/emacs/extensions/extensions" current-project)))
+      (neo--create-local-extensions-digest input-dir output-base-dir))))
+
+;; TODO not sure we need the complexity of two, essentially
+;; experimental, places. The reasoning is that the one in-tree is for
+;; use on branches without affecting what is used from other branches
+;; while the one prodiced by neo/create-local-extension-digest is also
+;; experimental but in the sense we do not rely on retrieving a digest
+;; from the repo, as it is not yet available
+(defun neo/create-development-extension-digest ()
+  (let* ((current-project (neo/check-emacs-wtree))
+	 (input-dir (expand-file-name "devex/editors/emacs/extensions/extensions" current-project))
+	 (extensions (neo--collect-extension-forms input-dir))
+	 (output-dir (expand-file-name "extensions/current" user-emacs-directory)))
+    (make-directory output-dir t)
+    (neo--write-extension-file extensions (expand-file-name "extensions.el" output-dir))))
+
 
 (provide 'neo-extensions-digest)
 

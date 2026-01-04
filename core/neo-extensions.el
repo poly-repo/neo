@@ -393,13 +393,28 @@ Args:
          (slug (neo--extension-slug extension)))
     `(puthash ,(neo/extension-slug-to-string slug) ,extension neo--extensions)))
 
+(defun neo--development-emacs-directory ()
+  "Return non-nil if `user-emacs-directory' matches
+$HOME/.local/share/wtrees/<anything>/devex/editors/emacs/."
+  (let* ((home (file-name-as-directory (expand-file-name "~")))
+	 (pattern (rx-to-string
+		   `(seq
+		     ,(regexp-quote home)
+		     ".local/share/wtrees/"
+		     (+ (not (any "/"))) ; arbitrary single directory
+		     "/devex/editors/emacs/"))))
+    (string-match-p pattern user-emacs-directory)))
 
 (defun neo--load-extensions-manifest ()
   "Load extension manifests from EXTENSIONS-SUMMARY-FILE.
 This populates a temporary `neo--extensions` and returns it."
   (let ((neo--extensions (make-hash-table :test 'equal)))
-    (neo/load-cached-file "extensions/current/extensions.el" t)
-    neo--extensions))
+    (if (and (neo--development-emacs-directory)
+	     (neo/load-file (expand-file-name "extensions/current/extensions.el" user-emacs-directory) t))
+	neo--extensions
+      (clrhash neo--extensions)
+      (neo/load-cached-file "extensions/current/extensions.el" t)
+      neo--extensions)))
 
 (defun neo--sorted-extensions-by-name (extensions)
   "Return a list of `neo/extension` values sorted by name."
