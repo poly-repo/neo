@@ -1,0 +1,45 @@
+#!/bin/bash
+
+while [[ "$1" == -* ]]; do
+    case "$1" in
+        -c|--coverage)
+            UNDERCOVER_FORCE=true
+            ;;
+        *)
+            echo "Error: Unknown option $1"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 [options] <extension-name | path/to/test/dir>"
+    exit 1
+fi
+
+CWD=$(pwd)
+TEST_TARGET="$1"
+
+if [[ "$TEST_TARGET" == */* ]]; then
+    TEST_DIR="$TEST_TARGET"
+else
+    TEST_DIR="devex/editors/emacs/extensions/extensions/neo/$TEST_TARGET/tests"
+fi
+
+if [ ! -d "$TEST_DIR" ]; then
+    echo "Error: Directory not found: $TEST_DIR"
+    exit 1
+fi
+
+cd "$TEST_DIR" || exit 1
+
+export UNDERCOVER_FORCE
+
+emacs -Q --batch \
+  --eval "(setq neo--test-topdir \"${CWD}\")" \
+  -l ${CWD}/devex/editors/emacs/scripts/emacs-test-setup.el \
+  -L "${CWD}/devex/editors/emacs/core" \
+  -L tests -L . -L .. \
+  -l buttercup \
+  -f buttercup-run-discover

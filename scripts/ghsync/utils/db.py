@@ -45,6 +45,30 @@ TABLE_DEFINITIONS = {
             "UNIQUE(repository_id, number)",
         ],
     },
+    "issue_labels": {
+        "columns": [
+            ("issue_id", "INTEGER NOT NULL"),
+            ("label_id", "INTEGER NOT NULL"),
+        ],
+        "constraints": [
+            "PRIMARY KEY (issue_id, label_id)",
+            "FOREIGN KEY (issue_id) REFERENCES issues (id) ON DELETE CASCADE",
+            "FOREIGN KEY (label_id) REFERENCES labels (id) ON DELETE CASCADE",
+        ],
+    },
+    "labels": {
+        "columns": [
+            ("id", "INTEGER PRIMARY KEY"),
+            ("name", "TEXT NOT NULL"),
+            ("color", "TEXT"),
+            ("description", "TEXT"),
+            ("repository_id", "INTEGER NOT NULL"),
+        ],
+        "constraints": [
+            "UNIQUE (repository_id, name)",
+            "FOREIGN KEY (repository_id) REFERENCES repositories (id)",
+        ],
+    },
 }
 
 
@@ -131,10 +155,42 @@ def update_sync_metadata(conn, user, repository, endpoint, etag):
     conn.commit()
 
 
+def upsert_labels(conn, labels_data, repository_id):
+    """Updates or inserts label data into the database."""
+    cursor = conn.cursor()
+    labels_to_upsert = []
+    for label in labels_data:
+        labels_to_upsert.append(
+            (
+                label["id"],
+                label["name"],
+                label["color"],
+                label.get("description"),
+                repository_id,
+            )
+        )
+
+    cursor.executemany(
+        """
+        INSERT INTO labels (id, name, color, description, repository_id)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            color = excluded.color,
+            description = excluded.description
+        """,
+        labels_to_upsert,
+    )
+    conn.commit()
+
+
 def upsert_issues(conn, issues_data, repository_id):
-    """Updates or inserts issue data into the database."""
+    """Updates or inserts issue data and their labels into the database."""
     cursor = conn.cursor()
     issues_to_upsert = []
+    all_labels_from_issues = []
+    issue_label_links = []
+
     for issue in issues_data:
         issue_type = "PR" if "pull_request" in issue else "Issue"
         merged_at = (
@@ -158,6 +214,11 @@ def upsert_issues(conn, issues_data, repository_id):
             )
         )
 
+        if "labels" in issue and issue["labels"]:
+            all_labels_from_issues.extend(issue["labels"])
+            for label in issue["labels"]:
+                issue_label_links.append((issue["id"], label["id"]))
+
     cursor.executemany(
         """
         INSERT INTO issues (id, number, title, type, state, draft, created_at, updated_at, closed_at, merged_at, repository_id)
@@ -176,6 +237,26 @@ def upsert_issues(conn, issues_data, repository_id):
         """,
         issues_to_upsert,
     )
+
+    if all_labels_from_issues:
+        upsert_labels(conn, all_labels_from_issues, repository_id)
+
+    issue_ids = [issue["id"] for issue in issues_data]
+    if issue_ids:
+        placeholders = ",".join("?" for _ in issue_ids)
+        cursor.execute(
+            f"DELETE FROM issue_labels WHERE issue_id IN ({placeholders})", issue_ids
+        )
+
+    if issue_label_links:
+        cursor.executemany(
+            """
+            INSERT INTO issue_labels (issue_id, label_id)
+            VALUES (?, ?)
+            """,
+            issue_label_links,
+        )
+
     conn.commit()
 
 

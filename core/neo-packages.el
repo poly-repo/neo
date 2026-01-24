@@ -33,7 +33,7 @@ But it was introduced because elpaca had a problem with it:
 (defvar neo--enabled-packages nil
   "Alist mapping (USER . EXTENSION) to a list of unexpanded `neo/use-package` forms.")
 
-
+(setq package-install-upgrade-built-in t)
 
 (setopt package-archives
         '(("gnu" . "https://elpa.gnu.org/packages/")

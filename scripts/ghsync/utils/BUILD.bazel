@@ -1,0 +1,11 @@
+load("//build/bzl:python.bzl", "o_py_library")
+
+o_py_library(
+    name = "utils_lib",
+    srcs = [
+        "__init__.py",
+        "auth.py",
+        "db.py",
+    ],
+    visibility = ["//:__subpackages__"],
+)

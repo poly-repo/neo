@@ -1,3 +1,5 @@
+(setq debug-on-error t)
+
 (setq message-log-max 100000)
 
 
