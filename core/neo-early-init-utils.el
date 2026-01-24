@@ -82,6 +82,14 @@ signals otherwise. Delegates to `neo/load-file`."
     (message "LOADING: %s" absolute-path)
     (neo/load-file absolute-path failure-ok)))
 
+(defconst neo--data-dir
+  (expand-file-name "neo/"
+		    (or (getenv "XDG_DATA_HOME")
+			"~/.local/share")))
+
+(defun neo/data-file-path (filename)
+  (expand-file-name filename neo--data-dir))
+
 (defun neo/paraphenalia (thing)
   "Return non-nil if THING should be displayed according to `neo/paraphenalia-list`.
 
