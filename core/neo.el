@@ -12,6 +12,7 @@
   (require feature))
 
 (neo--require 'neo-utils)
+(neo--require 'neo-window)
 (neo--require 'neo-custom)			; customization groups
 (neo--require 'neo-packages)			; package management
 (neo--require 'neo-logging)
