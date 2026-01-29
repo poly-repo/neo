@@ -1,0 +1,20 @@
+# Compiled
+*.elc
+
+# Backup files
+*~
+
+# Undo-tree save-files
+*.~undo-tree
+
+# Here we put what everybody generates
+.litter/
+
+# Used for development
+.neo-devel/
+
+# My image, not for distribution
+assets/hacker.png
+
+# Used by the Neo Config wizard
+.neo-wizard/
