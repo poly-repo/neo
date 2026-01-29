@@ -1,0 +1,55 @@
+---
+
+emacs_versions:
+  - version: master
+    source: git
+    suffix: gtk3
+    tree_sitter: 0.26.3
+
+    config:
+      - '--disable-gc-mark-trace'
+      - '--with-rsvg'
+      - '--with-tree-sitter'
+      - '--with-sqlite3'
+      - '--with-x-toolkit=gtk3'
+      - '--with-gif'
+      - '--with-png'
+      - '--with-jpeg'
+      - '--with-rsvg'
+      - '--with-tiff'
+
+  - version: 30.2
+    source: release
+ #   tree_sitter: 0.26.3
+    tree_sitter: 0.22.6         # I think this is the last version usable w/ 30.2
+
+    config:
+      - '--disable-gc-mark-trace'
+      - '--with-rsvg'
+      - '--with-tree-sitter'
+      - '--with-sqlite3'
+      - '--with-x-toolkit=lucid'
+      - '--with-gif'
+      - '--with-png'
+      - '--with-jpeg'
+      - '--with-rsvg'
+      - '--with-tiff'
+
+  - version: 30.2
+    source: release
+    suffix: gtk3
+#    tree_sitter: 0.26.3
+    tree_sitter: 0.22.6         # I think this is the last version usable w/ 30.2
+
+    config:
+      - '--disable-gc-mark-trace'
+      - '--with-rsvg'
+      - '--with-tree-sitter'
+      - '--with-sqlite3'
+      - '--with-x-toolkit=gtk3'
+      - '--with-gif'
+      - '--with-png'
+      - '--with-jpeg'
+      - '--with-rsvg'
+      - '--with-tiff'
+      

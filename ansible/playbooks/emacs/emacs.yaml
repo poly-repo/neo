@@ -1,0 +1,30 @@
+# Setup of a development environment for Omega contributors.
+#
+# This is the part we accept to be non-hermetic because installation
+# is expensive or the specific component is really intended to work
+# system wide. An example of the former category is ollama with its
+# load of models; an example of the latter is Emacs (or any other
+# editor people will want to support)
+#
+# you can run with:
+#
+# Install everything:
+# ansible-playbook infra/ansible/playbooks/omega-developer/omega-developer.yaml
+#
+# Install only a specific tag:
+# ansible-playbook infra/ansible/playbooks/omega-developer/omega-developer.yaml --tags llm
+#
+# Install all that is not slow:
+# ansible-playbook infra/ansible/playbooks/omega-developer/omega-developer.yaml --skip-tags-slow
+
+- hosts: localhost
+#  become: yes
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    home_dir: "{{ lookup('env', 'HOME') }}"
+    linux_user: "{{ lookup('env', 'USER') }}"
+
+  roles:
+    - { role: emacs-install, tags: ['slow'] }
+

@@ -1,0 +1,22 @@
+---
+
+- name: Install build dependencies for Emacs
+  include_tasks: "install-build-dependencies.yaml"
+  tags:
+    - dependencies
+
+- name: Install vterm module
+  include_tasks: vterm.yaml
+  vars:
+    vterm_repo: https://github.com/akermu/emacs-libvterm.git
+    vterm_src_dir: "{{ ansible_env.HOME }}/.cache/emacs-libvterm"
+    vterm_build_dir: "{{ vterm_src_dir }}/build"
+    vterm_xdg_data_home: >-
+      {{ ansible_env.XDG_DATA_HOME
+         | default(ansible_env.HOME ~ '/.local/share') }}
+    vterm_install_dir: "{{ vterm_xdg_data_home }}/emacs/site-lisp/vterm"
+    vterm_use_system_libvterm: false
+    
+- name: Install Emacs
+  include_tasks: "build-emacs.yaml"
+  loop: "{{ emacs_versions }}"

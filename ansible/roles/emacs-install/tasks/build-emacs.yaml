@@ -1,0 +1,283 @@
+---
+
+- name: Gather build parameters
+  set_fact:
+    emacs_version: "{{item.version}}"
+    source: "{{item.source}}"
+    config: '{{item.config|default([])}}'
+    patch: '{{item.patch|default("")}}'
+    suffix: '{{item.suffix|default("")}}'
+    tree_sitter_version: '{{item.tree_sitter|default("")}}'
+
+- name: Print tree-sitter version
+  debug:
+    msg: "Tree-sitter version: {{ tree_sitter_version }}"
+
+# TODO: consider for multiple versions:
+# 
+# tree_sitter_prefix: "{{ ansible_user_dir }}/.cache/tree-sitter/current"
+# and manage current as a symlink to v0.26.3.
+# Then rpath stays stable across upgrades.
+# but we allow for now to specify a tree-sitter version per emacs config, so this wouldn't work for now.
+- name: Derive tree-sitter paths
+  set_fact:
+    tree_sitter_prefix: "{{ ansible_user_dir }}/.cache/tree-sitter/v{{ tree_sitter_version }}"
+    tree_sitter_url: "https://github.com/tree-sitter/tree-sitter/archive/refs/tags/v{{ tree_sitter_version }}.tar.gz"
+  when: tree_sitter_version | length > 0
+  
+- name: Check for native compilation
+  set_fact:
+    config_options: "{{config|join(' ') if config is defined else ''}}"
+
+- name: Define target dir
+  set_fact:
+    emacs_target_dir: "{{ ansible_user_dir }}/.local/emacs-{{emacs_version | string}}{{ '-' + suffix if suffix | length > 0 else '' }}"
+
+
+- name: Print the target Emacs directory
+  debug:
+    msg: "Target Emacs directory is: {{ emacs_target_dir }}"
+
+- name: Set Emacs base url (release candidates)
+  set_fact:
+    emacs_base_url: "https://alpha.gnu.org/gnu/emacs/pretest"
+    emacs_top_dir: "emacs-{{ emacs_version | regex_replace('^(.*)(-rc[0-9])$', '\\1') }}"
+  when: (emacs_version | regex_search("^(.*)(-rc[0-9])$")) is not none
+
+- name: Set Emacs base url (official release)
+  set_fact:
+    emacs_base_url: "http://mirror.rit.edu/gnu/emacs"
+    emacs_top_dir: "emacs-{{emacs_version}}"
+  when: not emacs_version | regex_search("^(.*)(-rc[0-9])$")
+
+- name: Set Emacs tarfile
+  set_fact:
+    emacs_url: "{{emacs_base_url}}/emacs-{{emacs_version}}.tar.xz"
+
+# TODO: move all treesitter things into a separate role (or at least separate task file)
+- name: Check if tree-sitter {{ tree_sitter_version }} is already installed
+  stat:
+    path: "{{ tree_sitter_prefix }}/lib/libtree-sitter.so"
+  register: tree_sitter_installed
+
+- name: Create temporary build directory
+  tempfile:
+    state: directory
+    prefix: tree-sitter-
+  register: tree_sitter_build_dir
+  when: not tree_sitter_installed.stat.exists
+
+- name: Download and extract tree-sitter {{ tree_sitter_version }}
+  ansible.builtin.unarchive:
+    src: "{{ tree_sitter_url }}"
+    dest: "{{ tree_sitter_build_dir.path }}"
+    remote_src: true
+    extra_opts:
+      - --strip-components=1
+  when: not tree_sitter_installed.stat.exists
+
+- name: Build and install tree-sitter {{ tree_sitter_version }}
+  ansible.builtin.command:
+    cmd: make PREFIX={{ tree_sitter_prefix }} install
+    chdir: "{{ tree_sitter_build_dir.path }}"
+  environment:
+    CFLAGS: "-fPIC"
+  when: not tree_sitter_installed.stat.exists
+
+- name: Remove temporary build directory
+  file:
+    path: "{{ tree_sitter_build_dir.path }}"
+    state: absent
+  when: not tree_sitter_installed.stat.exists
+
+- name: Export tree-sitter build flags
+  set_fact:
+    tree_sitter_cflags: "-I{{ tree_sitter_prefix }}/include"
+
+    tree_sitter_ldflags: >-
+      -Wl,-rpath,{{ tree_sitter_prefix }}/lib
+      -L{{ tree_sitter_prefix }}/lib
+      -ltree-sitter
+
+# We shouldn't remove a directory when a Emacs using it is running
+- name: remove directory
+  ansible.builtin.file:
+    path: "/usr/local/emacs/emacs-master"
+    state: absent
+  become: true
+  when: emacs_version == 'master'
+
+- name: Check if a build is needed
+  stat:
+    path: "{{emacs_target_dir}}"
+  register: install_dir
+
+# - name: Display the path of install_dir
+#   debug:
+#     msg: "Install dir {{ install_dir.path }}"
+
+- name: Create temporary build directory
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: emacs-
+  register: source_dir
+#  when: not install_dir.stat.exists
+
+- name: Set Emacs tarfile
+  set_fact:
+    emacs_build_dir: "{{source_dir.path}}/emacs_build"
+    emacs_source_dir: "{{source_dir.path}}/emacs_source"
+#  when: not install_dir.stat.exists
+
+- name: Download
+  ansible.builtin.unarchive:
+    src: "{{emacs_url}}"
+    dest: "{{source_dir.path}}"
+    remote_src: true
+    extra_opts:
+      - --transform
+      - "s/^{{emacs_top_dir}}/emacs_source/"
+  when: not install_dir.stat.exists and source == 'release'
+
+- name: version
+  set_fact:
+    git_commitoid: "{{'master' if emacs_version == 'master' else 'emacs-{{emacs_version}}'}}"
+
+- name: Shallow clone from git at {{ emacs_version }}
+  ansible.builtin.git:
+    repo: 'https://git.savannah.gnu.org/git/emacs.git' # 'https://github.com/emacs-mirror/emacs.git'
+    dest: "{{source_dir.path}}/emacs_source"
+    single_branch: true
+    depth: 1
+    version: "{{ git_commitoid }}"
+  when: not install_dir.stat.exists and source == 'git'
+
+- name: autoconf
+  ansible.builtin.command:
+    cmd: "./autogen.sh"
+    chdir: "{{emacs_source_dir}}"
+  when: not install_dir.stat.exists and source == 'git'
+
+- name: Get the current Git commit hash in a directory
+  command: git -C "{{emacs_source_dir}}" rev-parse HEAD
+  register: git_commit_hash
+  when: not install_dir.stat.exists and source == 'git'
+
+- name: Get the current Git commit hash in a directory
+  set_fact:
+    git_commit_hash: "release"
+  when: source != 'git'
+
+- name: Display the Git commit hash
+  debug:
+    msg: "Current Git commit hash is {{ git_commit_hash.stdout }}"
+  when: not install_dir.stat.exists and source == 'git'
+
+- name: Get the date of the latest Git commit in the current directory
+  command: git log -1 --format=%cd
+  register: git_commit_date
+  when: not install_dir.stat.exists and source == 'git'
+
+- name: Display the date of the latest Git commit
+  debug:
+    msg: "Date of the latest Git commit is {{ git_commit_date.stdout }}"
+  when: not install_dir.stat.exists and source == 'git'
+
+- name: Create a temporary file
+  tempfile:
+    state: file
+    suffix: .tmp
+  register: temp_file
+
+- name: Expand template to the temporary file
+  template:
+    src: neo_git_info.patch.j2
+    dest: "{{ temp_file.path }}"
+  vars:
+    git_commit_date: "{{ git_commit_date.stdout }}"
+    git_commit_hash: "{{ git_commit_hash.stdout }}"
+  when: not install_dir.stat.exists and source == 'git'
+
+- name: Expand template to the temporary file
+  template:
+    src: neo_git_info.patch.j2
+    dest: "{{ temp_file.path }}"
+  vars:
+    git_commit_date: "<release>"
+    git_commit_hash: "<release>"
+  when: source != 'git'
+
+- name: Display the path of the temporary file
+  debug:
+    msg: "Template expanded to temporary file at {{ temp_file.path }}"
+
+- name: Display the content of the temporary file
+  command: cat "{{ temp_file.path }}"
+  register: file_content
+  changed_when: false
+
+- name: Show file content
+  debug:
+    var: file_content.stdout
+
+- name: Delete the temporary file
+  file:
+    path: "{{ temp_file.path }}"
+    state: absent
+  when: temp_file.path is defined
+
+- name: patch
+  ansible.posix.patch:
+    src: "{{patch}}"
+    basedir: "{{emacs_source_dir}}/src"
+  when: not install_dir.stat.exists and patch != ''
+
+- name: Create build directory
+  ansible.builtin.file:
+    path: "{{emacs_build_dir}}"
+    state: directory
+    mode: '0755'
+  when: not install_dir.stat.exists
+
+- name: Register gcc version that is installed on system
+  shell: gcc --version | sed -n -e "s,^gcc.* \([0-9]*\)\.[0-9]*\.[0-9]*.*$,\1,p"
+  check_mode: false
+  register: gcc_major_version
+
+- name: "Build {{emacs_version}}"
+  block:
+    - name: Configure
+      ansible.builtin.shell:
+        # CC is for native compilation. We should find it from distro
+        cmd: "CC=gcc-{{gcc_major_version.stdout}} {{emacs_source_dir}}/configure --prefix {{emacs_target_dir}} {{config_options}}"
+        chdir: "{{emacs_build_dir}}"
+      environment:
+        CFLAGS: "{{ tree_sitter_cflags }}"
+        CPPFLAGS: "{{ tree_sitter_cflags }}"
+        LDFLAGS: "{{ tree_sitter_ldflags }}"
+
+    - name: Bootstrap
+      ansible.builtin.command:
+        cmd: "make --jobs {{ansible_processor_vcpus}} bootstrap"
+        chdir: "{{emacs_build_dir}}"
+    - name: Build
+      ansible.builtin.command:
+        cmd: "make --jobs {{ansible_processor_vcpus}}"
+        chdir: "{{emacs_build_dir}}"
+    - name: install
+      ansible.builtin.command:
+        cmd: "make --jobs {{ansible_processor_vcpus}} install"
+        chdir: "{{emacs_build_dir}}"
+      become: true
+    - name: Copy Emacs src directory to installed location
+      ansible.builtin.copy:
+        src: "{{ emacs_source_dir }}/src"
+        dest: "{{ emacs_target_dir }}"
+        remote_src: yes
+        mode: preserve
+      become: true      
+    - name: remove directory
+      ansible.builtin.file:
+        path: "{{source_dir.path}}"
+        state: absent
+  when: not install_dir.stat.exists

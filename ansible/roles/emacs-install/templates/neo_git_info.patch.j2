@@ -1,0 +1,17 @@
+--- emacs.c
++++ emacs.c
+@@ -3582,6 +3582,14 @@ syms_of_emacs (void)
+   defsubr (&Sdaemonp);
+   defsubr (&Sdaemon_initialized);
+ 
++  DEFVAR_LISP ("neo/commit-sha", Vneo_commit_sha,
++	       doc: /* Commit SHA Emacs was built at.  */);
++  Vneo_commit_sha = build_string ("{{git_commit_hash}}");
++
++  DEFVAR_LISP ("neo/commit-date", Vneo_commit_date,
++	       doc: /* Date corresponding to commit SHA Emacs was built at.  */);
++  Vneo_commit_date = build_string ("{{git_commit_date}}");
++
+   DEFVAR_LISP ("command-line-args", Vcommand_line_args,
+ 	       doc: /* Args passed by shell to Emacs, as a list of strings.
+ Many arguments are deleted from the list as they are processed.  */);
