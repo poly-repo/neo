@@ -7,7 +7,24 @@
 
 ;;; Code:
 
-(defvar neo/paraphenalia-list 'neo/paraphenalia-all)
+(defvar neo/paraphenalia-list nil
+  "List of UI elements (paraphenalia) to display.
+
+It can take one of the following forms:
+
+  - The symbol `neo/paraphenalia-all`:
+    All UI elements are displayed.
+
+  - A list of symbols:
+    Only the explicitly listed symbols are displayed. Expected values include:
+    `neo/paraphenalia-scrollbar`, `neo/paraphenalia-toolbar`,
+    `neo/paraphenalia-menubar`, `neo/paraphenalia-advertisement`,
+    `neo/paraphenalia-scratch-message`.
+
+  - nil (default):
+    No UI elements are displayed (clean interface).
+
+This variable is used by `neo/paraphenalia` to determine visibility of UI components.")
 
 ;; we have an option for disabling scrollbars. But even when
 ;; enabled, there's no reason to have them in the minibuffer.
@@ -42,6 +59,8 @@
           emacs-minor-version)
   neo/cache-directory))
 
+(require 'neo-config)
+
 (neo/load-config-file "initial-frame-properties.el" t)
 
 ;; TODO when no existing config is found, we would like to show a
@@ -49,8 +68,12 @@
 ;; elpaca pops up *elpaca-log* and ruins the party. Not sure what is
 ;; the best way to proceed. Maybe when we bury the log buffer (when
 ;; there're no errors) we could re-instate the splash screen,
-(unless (neo/load-config-file "early-init-config.el" t)
-  (setq neo/paraphenalia-list 'neo/paraphenalia-all))
+(let ((pretend-new-user (neo/get-config "pretend-new-user")))
+  (if (or (null pretend-new-user)
+          (string= pretend-new-user "t"))
+      (setq neo/paraphenalia-list 'neo/paraphenalia-all)
+    (unless (neo/load-config-file "early-init-config.el" t)
+      (setq neo/paraphenalia-list 'neo/paraphenalia-all))))
 
 (unless (neo/paraphenalia 'neo/paraphenalia-scrollbar)
   (scroll-bar-mode -1))

@@ -1,6 +1,7 @@
 ;; -* lexical-binding: t -*-
 
 (require 'neo-extensions)
+(require 'neo-config)
 
 (cl-defstruct (neo-framework
                (:constructor make-neo-framework (&key available-extensions
@@ -40,11 +41,12 @@ If no cache exists, create empty hash tables for the slots."
 ;    (message "Adding %s" slug-string)
     (puthash slug-string installation installed)))
 
-;; TODO for now we force neo:full-monty
 (defun neo/bootstrap (framework)
   ;; TODO probably need to be moved to neo-framework and renamed maybe 'bootstrap'.
-  (let ((extensions (neo/topo-sort-from-roots (neo-framework-available-extensions framework)
-					      '("neo:full-monty"))))
+  (let* ((config-val (neo/get-config "enabled-extensions"))
+         (enabled-extensions (if config-val (read config-val) nil))
+         (extensions (neo/topo-sort-from-roots (neo-framework-available-extensions framework)
+					      enabled-extensions)))
     (neo/install-extensions-from-slugs framework extensions))
   (neo/load-installed-extensions framework)
   (neo/replay-installed-extensions-packages framework))
