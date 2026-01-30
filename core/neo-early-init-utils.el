@@ -1,5 +1,8 @@
 (require 'cl-lib)
 
+(defconst neo--core-dir (file-name-directory (or load-file-name buffer-file-name)))
+
+
 (defvar neo/--emacs-instance-name-cache nil
   "Cached result of `neo/get-emacs-instance-name`.")
 
@@ -119,22 +122,86 @@ Return value is non-nil if THING should be shown, nil otherwise."
   (or (eq neo/paraphenalia-list 'neo/paraphenalia-all)
       (memq thing neo/paraphenalia-list)))
 
+(defun neo/pretend-new-user ()
+  "Reset configuration and pretend to be a new user.
+
+╭──────────────────────────────────────────────────────────╮
+│ SQL: DELETE FROM config WHERE key = 'enabled-extensions' │
+╰──────────────────────────────────────────────────────────╯"
+  (interactive)
+  (require 'neo-config)
+  (sqlite-execute neo/config-db-handle "DELETE FROM config WHERE key = ?" '("enabled-extensions"))
+  (neo/set-config "pretend-new-user" "t")
+  (message "Enabled extensions reset and pretend-new-user set to t. Restart Emacs to see the new user experience."))
+
+(defun neo/full-monty-confirm (_button)
+  "Actually enable full monty mode and restart Emacs."
+  (require 'neo-config)
+  (neo/set-config "enabled-extensions" "(\"neo:full-monty\")")
+  (neo/set-config "pretend-new-user" "nil")
+  (if (fboundp 'restart-emacs)
+      (restart-emacs)
+    (save-buffers-kill-emacs)))
+
+(defun neo/full-monty (_button)
+  "Ask for confirmation before going full monty."
+  (let ((buf (get-buffer-create "*Neo YOLO*"))
+        (image-file (expand-file-name "yolo.png" neo--core-dir))
+        (wconf (current-window-configuration)))
+    (with-current-buffer buf
+      (erase-buffer)
+      (when (file-exists-p image-file)
+        (insert-image (create-image image-file))
+        (insert "\n\n"))
+      (insert-button "Yes, I really want to do this!"
+                     'action #'neo/full-monty-confirm
+                     'follow-link t)
+      (insert "   ")
+      (insert-button "No, get me out of here"
+                     'action (lambda (b)
+                               (let ((saved-wconf (button-get b 'wconf)))
+                                 (kill-buffer (current-buffer))
+                                 (when saved-wconf (set-window-configuration saved-wconf))))
+                     'wconf wconf
+                     'follow-link t))
+    (switch-to-buffer buf)
+    (delete-other-windows)))
+
 (defun neo/fancy-splash--replace-args (orig-fun &rest args)
   "Replace arguments to `fancy-splash-insert` if the second argument is the \"To start\" string."
   (if (and (> (length args) 1)
            (string-match-p "To start" (nth 2 args)))
-      ;; Replace with your custom args
-      (apply orig-fun
-             `(:face variable-pitch
-               "\nWelcome to Neo!\t"
-               :link ("Start configuration" ,(lambda (_b) (message "Clicked") :face (:weight bold)) "Help")
-	       "\t"
-               :link ("Don't do this 😜" ,(lambda (_b) (message "Clicked") :face (:weight bold)) "Go full Monty")
-               "\n"))
+      (let ((separator (concat (make-string 60 ?─) "\n")))
+        ;; Replace with your custom args
+        (apply orig-fun
+               `("\n" :face default ,separator
+                 :face (:inherit variable-pitch :weight bold) "Welcome to Neo!\t"
+                 :link ("Start configuration" ,(lambda (_b) (message "Clicked")) "Help" (:weight bold))
+	         "\t"
+                 :link ("Don't do this 😜" ,#'neo/full-monty "Go full Monty")
+		 "\n"
+					;                       :face variable-pitch "\n\nTo quit a partially entered command, type Control-g.\n"
+                 :face default ,separator)))
     ;; Otherwise call original function
     (apply orig-fun args)))
 
-;; Add the advice
+(defun neo/normal-splash-screen-extra (&rest _args)
+  "Add Neo welcome message to the text mode splash screen."
+  (let ((inhibit-read-only t))
+    (goto-char (point-min))
+    (let ((separator (concat (make-string 60 ?─) "\n")))
+      (insert "\n" separator)
+      (insert "Welcome to Neo!\n\n")
+      (insert-button "Start configuration"
+                     'action (lambda (_b) (message "Clicked"))
+                     'follow-link t)
+      (insert "    ")
+      (insert-button "Don't do this 😜"
+                     'action #'neo/full-monty
+                     'follow-link t)
+      (insert "\n" separator "\n"))))
+
 (advice-add 'fancy-splash-insert :around #'neo/fancy-splash--replace-args)
+(advice-add 'normal-splash-screen :after #'neo/normal-splash-screen-extra)
 
 (provide 'neo-early-init-utils)
