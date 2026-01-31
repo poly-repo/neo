@@ -680,21 +680,25 @@ The original `neo/use-package' is restored afterwards."
         (reverse used-packages)))))
 
 
-(defun neo/load-extensions (installed-extensions)
+(defun neo/load-extensions (installed-extensions &optional available-extensions)
   "Load extensions specified in INSTALLED-EXTENSIONS.
 This function iterates through the INSTALLED-EXTENSIONS list, which is a list
 of `neo/installation` objects. It looks up each extension by its slug in the
-`neo--extensions` hash table of available extensions, and loads it if found."
-  (dolist (installation installed-extensions)
-    (let* ((slug (neo/installation-extension-slug installation))
-           (slug-string (neo/extension-slug-to-string slug))
-           (extension (gethash slug-string neo--extensions)))
-      (neo/log-info 'core "Attempting to load extension with slug: '%s'" slug-string)
-      (if extension
-          (progn
-            (neo/log-info 'core "  -> Found, loading '%s'" (neo/extension-title extension))
-            (neo--load-extension extension))
-        (neo/log-warn "  -> Warning: Extension with slug '%s' not found in registry." slug-string)))))
+AVAILABLE-EXTENSIONS hash table (defaulting to `neo--extensions`), and loads it if found."
+  (let ((available (or available-extensions neo--extensions)))
+    (dolist (installation installed-extensions)
+      (let* ((slug (neo/installation-extension-slug installation))
+             (slug-string (neo/extension-slug-to-string slug))
+             (extension (gethash slug-string available)))
+        (if extension
+            (progn
+              (neo/log-info 'core "Loading extension %s" slug-string)
+              (if (neo--load-extension extension)
+                  (progn
+                    (neo/log-info 'core "  ✔️ Loaded '%s'" (neo/extension-title extension))
+                    (provide (neo/extension-feature-symbol slug)))
+                (neo/log-warn 'core "  ❌ Extension %s file not found or failed to load" slug-string)))
+          (neo/log-warn 'core "  ❌ Extension %s not found in registry" slug-string))))))
 
 ;; TODO only fetch if older than X hours unless FORCE is used
 (defun neo/fetch-extensions ()
