@@ -703,9 +703,9 @@ AVAILABLE-EXTENSIONS hash table (defaulting to `neo--extensions`), and loads it 
 
 ;; TODO only fetch if older than X hours unless FORCE is used.
 (defun neo/fetch-extensions ()
-  "Download and cache the latest neo-extensions.el if the SHA has changed.
-Keeps a copy in ~/.cache/<instance>/extensions/<SHA>/extensions.el
-and updates ~/.cache/<instance>/extensions/current symlink."
+  "Download and cache the latest neo-extensions.el manifest and repository content.
+Manifest goes to ~/.cache/<instance>/extensions/<SHA>/extensions.el (symlinked to current).
+Repository content goes to <user-emacs-directory>/extensions (if not in dev mode)."
   (let* ((base-url "https://github.com/poly-repo/neo-extensions/releases/download/latest/")
          (filename "neo-extensions.el")
          (sha-filename "neo-extensions.sha256")
@@ -714,7 +714,8 @@ and updates ~/.cache/<instance>/extensions/current symlink."
          (extensions-dir (expand-file-name "extensions/" cache-dir))
          (temp-sha (make-temp-file "neo-sha" nil ".sha256"))
          (sha-url (concat base-url sha-filename))
-         (file-url (concat base-url filename)))
+         (file-url (concat base-url filename))
+         (manifest-updated nil))
     
     (unless (file-directory-p extensions-dir)
       (make-directory extensions-dir t))
@@ -731,10 +732,11 @@ and updates ~/.cache/<instance>/extensions/current symlink."
            (current-link (expand-file-name "current" extensions-dir)))
       
       (unless (file-exists-p target-file)
-        (message "Downloading extensions version %s..." sha)
+        (message "Downloading extensions manifest version %s..." sha)
         (make-directory sha-dir t)
         (url-copy-file file-url target-file t)
-        (message "Extensions downloaded."))
+        (setq manifest-updated t)
+        (message "Manifest downloaded."))
       
       ;; Update symlink
       (let ((default-directory extensions-dir))
@@ -742,6 +744,25 @@ and updates ~/.cache/<instance>/extensions/current symlink."
         (make-symbolic-link sha "current" t))
       
       (delete-file temp-sha)
+
+      ;; Fetch repository content if needed
+      (unless (neo--development-emacs-directory)
+        (let ((repo-dir (expand-file-name "extensions" user-emacs-directory)))
+          (when (or manifest-updated (not (file-exists-p repo-dir)))
+            (message "Downloading extensions repository...")
+            (let* ((repo-url "https://github.com/poly-repo/neo-extensions/archive/refs/heads/main.tar.gz")
+                   (tar-file (make-temp-file "neo-repo-" nil ".tar.gz")))
+              (url-copy-file repo-url tar-file t)
+              (message "Extracting extensions to %s..." repo-dir)
+              (when (file-exists-p repo-dir)
+                (delete-directory repo-dir t))
+              (make-directory repo-dir t)
+              (let ((exit-code (call-process "tar" nil nil nil "xf" tar-file "-C" repo-dir "--strip-components=1")))
+                (if (zerop exit-code)
+                    (message "Extensions repository installed.")
+                  (message "Error extracting tarball: exit code %d" exit-code)))
+              (delete-file tar-file)))))
+      
       target-file)))
 
 (defun neo/fetch-extensions-config ()
