@@ -700,7 +700,7 @@ AVAILABLE-EXTENSIONS hash table (defaulting to `neo--extensions`), and loads it 
                 (neo/log-warn 'core "  ❌ Extension %s file not found or failed to load" slug-string)))
           (neo/log-warn 'core "  ❌ Extension %s not found in registry" slug-string))))))
 
-;; TODO only fetch if older than X hours unless FORCE is used
+;; TODO only fetch if older than X hours unless FORCE is used.
 (defun neo/fetch-extensions ()
   "Download and cache the latest neo-extensions.el if the SHA has changed.
 Keeps a copy in ~/.cache/neo/"
