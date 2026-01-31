@@ -76,22 +76,21 @@ in 'publisher:name' format."
 
 (cl-defmethod neo/load-installed-extensions ((framework neo-framework))
   "Load all installed extensions for FRAMEWORK."
-  (let ((installed (neo-framework-installed-extensions framework))
-        (available (neo-framework-available-extensions framework)))
-    (maphash
-     (lambda (_slug installation)
-       (let* ((slug (neo/installation-extension-slug installation))
-              (slug-string (neo/extension-slug-to-string slug))
-              (extension (gethash slug-string available)))
-         (when extension
-	   (neo/log-info 'core "Loading extension %s" slug-string)
-           (if (neo--load-extension extension)
-	       (progn
-		 (neo/log-info 'core "  ✔️ Loaded '%s'" (neo/extension-title extension))
-		 (provide (neo/extension-feature-symbol slug)))
-;		 (provide (intern (format "neo-extension-%s-%s" (neo/extension-slug-publisher slug) (neo/extension-slug-name slug)))))
-	     (neo/log-warn 'core "  ❌ Extension %s not found" slug-string)))))
-     installed)))
+  (let* ((installed-map (neo-framework-installed-extensions framework))
+         (available (neo-framework-available-extensions framework))
+         (installed-slugs (let (keys) (maphash (lambda (k _v) (push k keys)) installed-map) keys))
+         ;; Sort installed extensions topologically to ensure dependencies are loaded first
+         (sorted-slugs (neo/topo-sort-from-roots available installed-slugs '(:on-missing ignore)))
+         (sorted-installations '()))
+    
+    ;; Collect installation objects in sorted order
+    (dolist (slug sorted-slugs)
+      (when-let ((inst (gethash slug installed-map)))
+        (push inst sorted-installations)))
+    (setq sorted-installations (nreverse sorted-installations))
+    
+    ;; Use the common loader
+    (neo/load-extensions sorted-installations available)))
 
 (cl-defgeneric neo/get-extension (framework slug)
   "Load all installed extensions for FRAMEWORK.")
