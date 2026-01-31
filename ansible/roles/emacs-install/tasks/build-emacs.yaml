@@ -255,6 +255,7 @@
         CFLAGS: "{{ tree_sitter_cflags }}"
         CPPFLAGS: "{{ tree_sitter_cflags }}"
         LDFLAGS: "{{ tree_sitter_ldflags }}"
+        PKG_CONFIG_PATH: "{{ tree_sitter_prefix }}/lib/pkgconfig"
 
     - name: Bootstrap
       ansible.builtin.command:
