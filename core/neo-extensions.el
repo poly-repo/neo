@@ -2,6 +2,7 @@
 
 (require 'cl-lib)
 (require 'cl-generic)
+(require 'subr-x)
 
 (require 'neo-extensions-digest)
 
@@ -703,41 +704,45 @@ AVAILABLE-EXTENSIONS hash table (defaulting to `neo--extensions`), and loads it 
 ;; TODO only fetch if older than X hours unless FORCE is used.
 (defun neo/fetch-extensions ()
   "Download and cache the latest neo-extensions.el if the SHA has changed.
-Keeps a copy in ~/.cache/neo/"
+Keeps a copy in ~/.cache/<instance>/extensions/<SHA>/extensions.el
+and updates ~/.cache/<instance>/extensions/current symlink."
   (let* ((base-url "https://github.com/poly-repo/neo-extensions/releases/download/latest/")
          (filename "neo-extensions.el")
          (sha-filename "neo-extensions.sha256")
-	 (instance (neo/get-emacs-instance-name))
+         (instance (neo/get-emacs-instance-name))
          (cache-dir (expand-file-name (format "~/.cache/%s/" instance)))
-         (file-path (expand-file-name filename cache-dir))
-         (sha-path (expand-file-name sha-filename cache-dir))
-         (sha-latest-path (expand-file-name (concat sha-filename ".latest") cache-dir))
-         (file-url (concat base-url filename))
-         (sha-url (concat base-url sha-filename)))
+         (extensions-dir (expand-file-name "extensions/" cache-dir))
+         (temp-sha (make-temp-file "neo-sha" nil ".sha256"))
+         (sha-url (concat base-url sha-filename))
+         (file-url (concat base-url filename)))
     
-    (unless (file-directory-p cache-dir)
-      (make-directory cache-dir t))
+    (unless (file-directory-p extensions-dir)
+      (make-directory extensions-dir t))
 
-    (url-copy-file sha-url sha-latest-path t)
-
-    (let ((update-needed (or (not (file-exists-p file-path))
-                             (not (file-exists-p sha-path))
-                             (not (string= (with-temp-buffer
-                                             (insert-file-contents sha-latest-path)
-                                             (buffer-string))
-                                           (with-temp-buffer
-                                             (insert-file-contents sha-path)
-                                             (buffer-string)))))))
-      (when update-needed
-        (message "Updating %s..." file-path)
-        (url-copy-file file-url file-path t)
-        (rename-file sha-latest-path sha-path t)
-        (message "neo-extensions.el updated."))
-      (unless update-needed
-        (delete-file sha-latest-path)
-        (message "neo-extensions.el is up to date.")))
-
-    file-path))
+    (url-copy-file sha-url temp-sha t)
+    
+    (let* ((sha-content (with-temp-buffer
+                          (insert-file-contents temp-sha)
+                          (string-trim (buffer-string))))
+           ;; Take first word as SHA
+           (sha (car (split-string sha-content)))
+           (sha-dir (expand-file-name sha extensions-dir))
+           (target-file (expand-file-name "extensions.el" sha-dir))
+           (current-link (expand-file-name "current" extensions-dir)))
+      
+      (unless (file-exists-p target-file)
+        (message "Downloading extensions version %s..." sha)
+        (make-directory sha-dir t)
+        (url-copy-file file-url target-file t)
+        (message "Extensions downloaded."))
+      
+      ;; Update symlink
+      (let ((default-directory extensions-dir))
+        (ignore-errors (delete-file "current"))
+        (make-symbolic-link sha "current" t))
+      
+      (delete-file temp-sha)
+      target-file)))
 
 (defun neo/fetch-extensions-config ()
   "Load user-specific configuration from the cache directory.
