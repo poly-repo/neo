@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+# Ehi Emacs, this is -*- python -*-
+
+# FONT_FAMILY=$1
+
+# FONT_FAMILY=Roboto
+
+# declare -A FONT_STYLES
+# FONT_STYLES[100]=Thin
+# FONT_STYLES[200]=ExtraLight
+# FONT_STYLES[300]=Light
+# FONT_STYLES[400]=Regular
+# FONT_STYLES[500]=Medium
+# FONT_STYLES[600]=SemiBold
+# FONT_STYLES[700]=Bold
+# FONT_STYLES[800]=ExtraBold
+# FONT_STYLES[900]=Black
+
+# BASE_URL='https://fonts.googleapis.com/css2'
+
+# OUT=$(wget -q  "${BASE_URL}?family=${FONT_FAMILY}:wght@100;200;300;400;500;600;700;800;900&display=swap" -O -  )
+
+# #echo -e "$OUT" | sed -e 's,font-weight:[ ]*\([0-9]*\);,\1,g' -e 's,src: url(\([^)]*\))[ ]*format.*,\1,g'
+
+# echo -e "$OUT" | sed -e 's,font-weight:[ ]*\([0-9]*\);,\1,g' -e 's,src: url(\([^)]*\)).*,\1,g' -e '/[@{}-]/d'
+
+import argparse
+#import cssutils
+import os
+import re
+import requests
+import wget
+import zipfile
+from urllib.parse import urlparse
+from os.path import splitext
+from pathlib import Path
+
+# Apple fonts
+# https://www.securitronlinux.com/debian-testing/install-mac-osx-fonts-on-linux-easily/
+
+# Microsoft
+# Cascadia
+
+# if [[ ! -f ${HOME}/.fonts/MaterialIcons-Regular.ttf ]]; then
+# echo "Material Icons (309MB/2.1GB)"
+# wget https://github.com/google/material-design-icons/archive/refs/tags/4.0.0.zip -q
+# unzip 4.0.0.zip
+# cp material-design-icons-4.0.0/font/MaterialIcons-Regular.ttf ${HOME}/.fonts
+# cp material-design-icons-4.0.0/font/MaterialIconsOutlined-Regular.otf ${HOME}/.fonts
+# cp material-design-icons-4.0.0/font/MaterialIconsRound-Regular.otf ${HOME}/.fonts
+# cp material-design-icons-4.0.0/font/MaterialIconsSharp-Regular.otf ${HOME}/.fonts
+# cp material-design-icons-4.0.0/font/MaterialIconsTwoTone-Regular.otf ${HOME}/.fonts
+# rm -rf material-design-icons-4.0.0
+# else
+# echo "Skipping Material Icons"
+# fi
+
+# echo "JetBrainsMono"
+# wget https://download.jetbrains.com/fonts/JetBrainsMono-2.225.zip -q
+# unzip JetBrainsMono-2.225.zip
+# cp fonts/ttf/*.ttf ${HOME}/.fonts/
+# cp fonts/variable/*ttf ${HOME}/.fonts
+# rm -rf fonts
+
+
+def nerd_download_family(family, font_dir):
+    base_url = 'https://github.com/ryanoasis/nerd-fonts/releases/latest'
+    response = requests.get(base_url)
+    latest_version = response.url.rsplit('/', 1)[-1]
+    download_url = f"https://github.com/ryanoasis/nerd-fonts/releases/download/{latest_version}/{family}.zip"
+    response = wget.download(url=download_url, out=f"/tmp/{family}.zip",bar=None)
+    print(response)
+    zip_file = zipfile.ZipFile(f"/tmp/{family}.zip", "r")
+    [zip_file.extract(file, font_dir) for file in zip_file.namelist() if file.endswith(('.ttf', '.otf'))]
+    zip_file.close()
+    
+styles = {
+    100: 'Thin',
+    200: 'ExtraLight',
+    300: 'Light',
+    400: 'Regular',
+    500: 'Medium',
+    600: 'SemiBold',
+    700: 'Bold',
+    800: 'ExtraBold',
+    900: 'Black',
+}
+
+def google_download_variant(family, weight, variant, url, font_dir):
+    print(f"Downloading {family}-{variant} [weight: {weight}] from {url}")
+    path = urlparse(url).path
+    ext = splitext(path)[1]
+    response = wget.download(url=url, out=os.path.join(font_dir, f"{family}-{variant}{ext}"),bar=None)
+    print(response)
+
+def google_download_family(family, font_dir):
+    base_url = 'https://fonts.googleapis.com/css2'
+    weights = '100;200;300;400;500;600;700;800;900'
+    url = f'{base_url}?family={family}:wght@{weights}&display=swap'
+    r = requests.get(url, allow_redirects=True)
+
+    weight_re = re.compile("^\s*font-weight:\s*(?P<weight>[0-9]+);.*$")
+    url_re = re.compile("^\s*src: url\((?P<url>[^)]+)\).*$")
+    
+    variant_weight = None
+    variant_url = None
+    for l in r.content.decode().split('\n'):
+        m = weight_re.match(l)
+        if m:
+            variant_weight = m.group('weight')
+        m = url_re.match(l)
+        if m:
+            variant_url = m.group('url')
+
+        if variant_weight and variant_url:
+            google_download_variant(family, variant_weight, styles[int(variant_weight)], variant_url, font_dir)
+            variant_weight = None
+            variant_url = None
+    
+def main(family_and_source, base_dir):
+    family, source = family_and_source.split(':')
+
+    font_dir = os.path.join(base_dir, source, family)
+    Path(font_dir).mkdir(parents=True, exist_ok=True)
+
+    if source == 'google':
+        google_download_family(family, font_dir)
+    elif source == 'nerd':
+        nerd_download_family(family, font_dir)
+    else:
+        print("Unknown source")
+    
+#    css=cssutils.parseUrl(url)
+#    print(css.cssText)
+    
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        prog='google-download',
+        description='Download a single family of Google fonts',
+    )
+    parser.add_argument('family')
+    parser.add_argument('base_dir')
+    args = parser.parse_args()
+
+    print(f'DIR: {args.base_dir}')
+    main(family_and_source=args.family, base_dir=args.base_dir)

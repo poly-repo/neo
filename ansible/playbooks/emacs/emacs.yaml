@@ -19,7 +19,7 @@
 
 - hosts: localhost
 #  become: yes
-
+q
   vars:
     ansible_python_interpreter: /usr/bin/python3
     home_dir: "{{ lookup('env', 'HOME') }}"
@@ -27,4 +27,15 @@
 
   roles:
     - { role: emacs-install, tags: ['slow'] }
+    - role: fonts
+      tags: ['slow']
+      vars:
+        font_families:
+          - Roboto:google
+          - Tangerine:google
+          - Nunito Sans:google
+          - Noto Music:google
+          - Source Code Pro:google
+          - Hack:nerd
+          - FontAwesome:nerd
 

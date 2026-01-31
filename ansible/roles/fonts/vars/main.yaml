@@ -1,0 +1,11 @@
+font_base_directory: "{{ home_dir }}/.fonts"
+
+font_families:
+  - Roboto:google
+  - Tangerine:google
+  - Nunito Sans:google
+  - Noto Music:google
+  - Source Code Pro:google
+  - Hack:nerd
+  - FontAwesome:nerd
+#  - FiraMono
