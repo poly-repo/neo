@@ -406,12 +406,23 @@ $HOME/.local/share/wtrees/<anything>/devex/editors/emacs/."
 		     "/devex/editors/emacs/"))))
     (string-match-p pattern user-emacs-directory)))
 
+(defun neo--extensions-base-dir ()
+  "Return the base directory containing extension sources.
+In development mode, this includes the extra 'extensions' subdirectory.
+In production (installed) mode, it is flattened."
+  (expand-file-name
+   (if (neo--development-emacs-directory)
+       "extensions/extensions/"
+     "extensions/")
+   user-emacs-directory))
+
 (defun neo--load-extensions-manifest ()
   "Load extension manifests from EXTENSIONS-SUMMARY-FILE.
 This populates a temporary `neo--extensions` and returns it."
   (let ((neo--extensions (make-hash-table :test 'equal)))
     (if (and (neo--development-emacs-directory)
-	     (neo/load-file (expand-file-name "extensions/current/extensions.el" user-emacs-directory) t))
+	     (or (neo/load-file (expand-file-name "extensions/current/extensions.el" user-emacs-directory) t)
+		 (neo/load-file (expand-file-name "extensions/build/extensions.el" user-emacs-directory) t)))
 	neo--extensions
       (clrhash neo--extensions)
       (neo/load-cached-file "extensions/current/extensions.el" t)
@@ -608,7 +619,7 @@ If the file exists but errors during load, the error is signaled.
 Returns non-nil on successful load, nil if file does not exist."
   (let* ((publisher (neo/extension-publisher ext))
          (name      (neo--normalize-name (neo/extension-name ext)))
-         (base      (expand-file-name "extensions/extensions/" user-emacs-directory))
+         (base      (neo--extensions-base-dir))
          (file-dir  (expand-file-name (format "%s/%s" publisher name) base))
          (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
     (if (not (file-exists-p file))
@@ -664,7 +675,7 @@ The original `neo/use-package' is restored afterwards."
   (neo/refresh-package-archives)
   (let* ((publisher (neo/extension-publisher ext))
          (name      (neo--normalize-name (neo/extension-name ext)))
-         (base      (expand-file-name "extensions/extensions/" user-emacs-directory))
+         (base      (neo--extensions-base-dir))
          (file-dir  (expand-file-name (format "%s/%s" publisher name) base))
          (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
     (when (file-exists-p file)
@@ -706,47 +717,47 @@ AVAILABLE-EXTENSIONS hash table (defaulting to `neo--extensions`), and loads it 
   "Download and cache the latest neo-extensions.el manifest and repository content.
 Manifest goes to ~/.cache/<instance>/extensions/<SHA>/extensions.el (symlinked to current).
 Repository content goes to <user-emacs-directory>/extensions (if not in dev mode)."
-  (let* ((base-url "https://github.com/poly-repo/neo-extensions/releases/download/latest/")
-         (filename "neo-extensions.el")
-         (sha-filename "neo-extensions.sha256")
-         (instance (neo/get-emacs-instance-name))
-         (cache-dir (expand-file-name (format "~/.cache/%s/" instance)))
-         (extensions-dir (expand-file-name "extensions/" cache-dir))
-         (temp-sha (make-temp-file "neo-sha" nil ".sha256"))
-         (sha-url (concat base-url sha-filename))
-         (file-url (concat base-url filename))
-         (manifest-updated nil))
-    
-    (unless (file-directory-p extensions-dir)
-      (make-directory extensions-dir t))
+  (unless (neo--development-emacs-directory)
+    (let* ((base-url "https://github.com/poly-repo/neo-extensions/releases/download/latest/")
+           (filename "neo-extensions.el")
+           (sha-filename "neo-extensions.sha256")
+           (instance (neo/get-emacs-instance-name))
+           (cache-dir (expand-file-name (format "~/.cache/%s/" instance)))
+           (extensions-dir (expand-file-name "extensions/" cache-dir))
+           (temp-sha (make-temp-file "neo-sha" nil ".sha256"))
+           (sha-url (concat base-url sha-filename))
+           (file-url (concat base-url filename))
+           (manifest-updated nil))
+      
+      (unless (file-directory-p extensions-dir)
+        (make-directory extensions-dir t))
 
-    (url-copy-file sha-url temp-sha t)
-    
-    (let* ((sha-content (with-temp-buffer
-                          (insert-file-contents temp-sha)
-                          (string-trim (buffer-string))))
-           ;; Take first word as SHA
-           (sha (car (split-string sha-content)))
-           (sha-dir (expand-file-name sha extensions-dir))
-           (target-file (expand-file-name "extensions.el" sha-dir))
-           (current-link (expand-file-name "current" extensions-dir)))
+      (url-copy-file sha-url temp-sha t)
       
-      (unless (file-exists-p target-file)
-        (message "Downloading extensions manifest version %s..." sha)
-        (make-directory sha-dir t)
-        (url-copy-file file-url target-file t)
-        (setq manifest-updated t)
-        (message "Manifest downloaded."))
-      
-      ;; Update symlink
-      (let ((default-directory extensions-dir))
-        (ignore-errors (delete-file "current"))
-        (make-symbolic-link sha "current" t))
-      
-      (delete-file temp-sha)
+      (let* ((sha-content (with-temp-buffer
+                            (insert-file-contents temp-sha)
+                            (string-trim (buffer-string))))
+             ;; Take first word as SHA
+             (sha (car (split-string sha-content)))
+             (sha-dir (expand-file-name sha extensions-dir))
+             (target-file (expand-file-name "extensions.el" sha-dir))
+             (current-link (expand-file-name "current" extensions-dir)))
+        
+        (unless (file-exists-p target-file)
+          (message "Downloading extensions manifest version %s..." sha)
+          (make-directory sha-dir t)
+          (url-copy-file file-url target-file t)
+          (setq manifest-updated t)
+          (message "Manifest downloaded."))
+        
+        ;; Update symlink
+        (let ((default-directory extensions-dir))
+          (ignore-errors (delete-file "current"))
+          (make-symbolic-link sha "current" t))
+        
+        (delete-file temp-sha)
 
-      ;; Fetch repository content if needed
-      (unless (neo--development-emacs-directory)
+        ;; Fetch repository content if needed
         (let ((repo-dir (expand-file-name "extensions" user-emacs-directory)))
           (when (or manifest-updated (not (file-exists-p repo-dir)))
             (message "Downloading extensions repository...")
@@ -757,13 +768,13 @@ Repository content goes to <user-emacs-directory>/extensions (if not in dev mode
               (when (file-exists-p repo-dir)
                 (delete-directory repo-dir t))
               (make-directory repo-dir t)
-              (let ((exit-code (call-process "tar" nil nil nil "xf" tar-file "-C" repo-dir "--strip-components=1")))
+              (let ((exit-code (call-process "tar" nil nil nil "xf" tar-file "-C" repo-dir "--strip-components=2")))
                 (if (zerop exit-code)
                     (message "Extensions repository installed.")
                   (message "Error extracting tarball: exit code %d" exit-code)))
-              (delete-file tar-file)))))
-      
-      target-file)))
+              (delete-file tar-file))))
+        
+        target-file))))
 
 (defun neo/fetch-extensions-config ()
   "Load user-specific configuration from the cache directory.
