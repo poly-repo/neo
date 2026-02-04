@@ -45,9 +45,6 @@ This variable is used by `neo/paraphenalia` to determine visibility of UI compon
              (expand-file-name "core" (file-name-directory (or load-file-name buffer-file-name))))
 (require 'neo-early-init-utils)
 
-;; TODO move inside neo-early-init-utils
-(defvar neo/first-run (not (file-exists-p (format "~/.config/%s/current-profile/neo.sqlite" (neo/get-emacs-instance-name)))))
-			   
 (eval-and-compile
   (defvar neo/cache-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CACHE_HOME") "~/.cache")))
   (defvar neo/config-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.config"))))
@@ -64,19 +61,28 @@ This variable is used by `neo/paraphenalia` to determine visibility of UI compon
 
 (require 'neo-config)
 
+(defvar neo/first-run (let ((pretend-new-user (neo/get-config "pretend-new-user")))
+			(or (null pretend-new-user) (string= pretend-new-user "t"))))
+
 (neo/load-config-file "initial-frame-properties.el" t)
+
 
 ;; TODO when no existing config is found, we would like to show a
 ;; pristine Emacs splash screen.  Unfortunately in those conditions
 ;; elpaca pops up *elpaca-log* and ruins the party. Not sure what is
 ;; the best way to proceed. Maybe when we bury the log buffer (when
 ;; there're no errors) we could re-instate the splash screen,
-(let ((pretend-new-user (neo/get-config "pretend-new-user")))
-  (if (or (null pretend-new-user)
-          (string= pretend-new-user "t"))
-      (setq neo/paraphenalia-list 'neo/paraphenalia-all)
-    (unless (neo/load-config-file "early-init-config.el" t)
-      (setq neo/paraphenalia-list 'neo/paraphenalia-all))))
+(setq neo/paraphenalia-list 'neo/paraphenalia-all)
+(let ((saved-paraphenalia-list (neo/get-config "paraphenalia-config")))
+  (when saved-paraphenalia-list
+    (setq neo/paraphenalia-list (read saved-paraphenalia-list))))
+
+;; (let ((pretend-new-user (neo/get-config "pretend-new-user")))
+;;   (if (or (null pretend-new-user)
+;;           (string= pretend-new-user "t"))
+;;       (setq neo/paraphenalia-list 'neo/paraphenalia-all)
+;;     (unless (neo/load-config-file "early-init-config.el" t)
+;;       (setq neo/paraphenalia-list 'neo/paraphenalia-all))))
 
 (unless (neo/paraphenalia 'neo/paraphenalia-scrollbar)
   (scroll-bar-mode -1))
