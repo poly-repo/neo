@@ -21,6 +21,8 @@
 
 (neo/set-emacs-source-directories)
 
+(use-package project :ensure t)
+
 (setq neo--framework (neo--framework-instance))
 (neo/bootstrap neo--framework)
 
