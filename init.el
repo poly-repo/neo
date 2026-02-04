@@ -48,6 +48,24 @@
   (add-to-list 'load-path (expand-file-name subdir user-emacs-directory)))
 
 ;; TODO not sure if needed. I think I had problems with lexical binding
-;(require 'neo-early-init-utils)
-(require 'neo)
+					;(require 'neo-early-init-utils)
+(if neo/first-run
+    (display-startup-screen)
+  (require 'neo)
+  (elpaca-wait)
+  (simple-modeline-mode 1)
+  (persp-switch "*dashboard*")
+  (neo/dashboard))
 
+;; TODO when not first run and we don't have a context saved we should probably
+;; show the dashboard if available
+;; (if neo/first-run
+;;     (display-startup-screen))
+					;  (when (fboundp 'neo/dashboard)
+					;    (neo/dashboard)))
+
+(add-hook 'emacs-startup-hook
+	  (lambda ()
+	    (when (and (not inhibit-startup-screen)
+		       (not initial-buffer-choice))
+	      (display-startup-screen))))

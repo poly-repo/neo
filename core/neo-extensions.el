@@ -37,7 +37,7 @@
   emblem-hilighted-img ;; derived from emblem applying a solid
   ;; background matching highlight. Changes with theme setting, need to
   ;; register a hook for that.
-)
+  )
 
 (cl-defstruct (neo/extension-slug
                (:print-function
@@ -95,11 +95,11 @@
       (insert-image (create-image emblem 'png t))
       (insert " ")))
 
-    ;; Title
-    (insert (propertize (or (neo/extension-title ext) "Unnamed")
-                        'face '(:weight bold :height 1.5)))
-    (insert "\n\n")
-)
+  ;; Title
+  (insert (propertize (or (neo/extension-title ext) "Unnamed")
+                      'face '(:weight bold :height 1.5)))
+  (insert "\n\n")
+  )
 
 (defvar neo/info-icon-map
   (let ((map (make-sparse-keymap)))
@@ -136,50 +136,24 @@
     ;; Returning a string here still lets the echo area show text too if desired
     nil))
 
-;(neo/use-package posframe :ensure t)
-;(require 'posframe)
-
 (cl-defmethod neo/render ((ext neo/extension))
   "Render EXT in the current buffer. Return (start . end) position."
   (let ((start (point)))
     ;; Insert image using overlay
-      (let* ((emblem (neo/extension-emblem ext))
-	     (img (if (stringp emblem)
-		     (create-image emblem 'png t :data-p t)
-		   (create-image (expand-file-name "assets/default-emblem64.png" user-emacs-directory) 'png))))
-          ;; Insert a space and record its bounds *after* insertion
-          (insert " ")
-          (let ((ov (make-overlay (1- (point)) (point))))
-            (overlay-put ov 'display img)
-            (overlay-put ov 'neo-image t)
-            ;; Store it in the extension struct
-            (setf (neo/extension-summary-overlay ext) ov)))
-    
-    ;; ;; Insert image using overlay
-    ;; (when-let ((emblem (neo/extension-emblem ext)))
-    ;;   (when (stringp emblem)
-    ;;     (let ((img (create-image emblem 'png t)))
-    ;;       ;; Insert a space and record its bounds *after* insertion
-    ;;       (insert " ")
-    ;;       (let ((ov (make-overlay (1- (point)) (point))))
-    ;;         (overlay-put ov 'display img)
-    ;;         (overlay-put ov 'neo-image t)
-    ;;         ;; Store it in the extension struct
-    ;;         (setf (neo/extension-summary-overlay ext) ov)))))
+    (let* ((emblem (neo/extension-emblem ext))
+	   (img (if (stringp emblem)
+		    (create-image emblem 'png t :data-p t)
+		  (create-image (expand-file-name "assets/default-emblem64.png" user-emacs-directory) 'png))))
+      ;; Insert a space and record its bounds *after* insertion
+      (insert " ")
+      (let ((ov (make-overlay (1- (point)) (point))))
+        (overlay-put ov 'display img)
+        (overlay-put ov 'neo-image t)
+        ;; Store it in the extension struct
+        (setf (neo/extension-summary-overlay ext) ov)))
     
     (insert " ") ;; optional visual spacing
 
-    ;; Title
-    ;; (let ((info '(("Publisher" . "neo")
-    ;; 		  ("Type" . "git")
-    ;; 		  ("URL" . "https://github.com/poly-repo/neo-extensions.git")
-    ;; 		  ("Path" . "extensions/uno/news"))))
-    ;;   (insert
-    ;;    (propertize "❓"
-    ;; 		   'help-echo (neo/make-hover-callback info)
-    ;; 		   'mouse-face 'default ; 'highlight
-    ;; 		   'keymap neo/info-icon-map)))
-    
     (insert (propertize (or (neo/extension-title ext) "Unnamed")
                         'face '(:weight bold :height 1.2)))
     (insert "\n\n")
@@ -189,24 +163,6 @@
       (insert (propertize desc 'face '(:slant italic :height 0.95)))
       (insert "\n\n"))
 
-
-    ;; ;; Info block
-    ;; (let ((repo (neo/extension-repository ext)))
-    ;;   (dolist (pair `(("Publisher" ,(neo/extension-publisher ext))
-    ;;                   ("Type" ,(neo/repository-type repo))
-    ;;                   ("URL" ,(neo/repository-url repo))
-    ;;                   ("Path" ,(neo/repository-path repo))))
-    ;;     (when (cadr pair)
-    ;;       (insert (format "%-10s: %s\n" (car pair) (cadr pair))))))
-
-    ;; Divider
-    ;; (let ((width (1- (or (window-body-width nil t) 80))))
-    ;;   (insert (make-string width ?─) "\n"))
-    ;; (insert
-    ;;  (propertize " "
-    ;; 		 'display '(space :align-to right)
-    ;; 		 'face '(:background "gray30")))
-    ;; (insert "\n")
     (neo/insert-thin-divider)
     
     ;; Final range
@@ -247,26 +203,12 @@
 (neo/update-divider-face)
 (add-hook 'neo/after-theme-load-hook #'neo/update-divider-face)
 
-;; (defun neo/insert-thin-divider (&optional color)
-;;   "Insert a thin horizontal divider using underline, aligned to window width.
-;; If COLOR is nil, use the theme's default foreground color."
-;;   (let* ((line-color (or color (face-foreground 'default nil t)))
-;;          (bg-color   (face-background 'default nil t)))
-;; ;    (insert "\n")
-;;     (insert
-;;      (propertize " "
-;;                  'display '(space :align-to right)
-;;                  'face `(:overline ,line-color
-;;                          :foreground ,bg-color
-;;                          :background ,bg-color)))
-;;     (insert "\n")))
-
 (defun neo/insert-thin-divider (&optional color)
   "Insert a thin horizontal divider using underline, aligned to window width.
 If COLOR is nil, use the theme's default foreground color."
   (let* ((line-color (or color (face-foreground 'default nil t)))
          (bg-color   (face-background 'default nil t)))
-;    (insert "\n")
+					;    (insert "\n")
     (insert
      (propertize " "
                  'display '(space :align-to right)
@@ -348,6 +290,7 @@ Labels are bolded, values are colored."
        extensions))
     (pop-to-buffer buf)))
 
+
 (defmacro neo/extension (&rest args)
   "Register a new Neo extension and store it in `neo--extensions`.
 
@@ -358,7 +301,15 @@ Args:
 - :categories (LIST of symbols)
 - :keywords (LIST of symbols)
 - :requires (LIST of symbols or a single symbol)
-- :repository (plist with :type, :url, :path)"
+- :repository (plist with :type, :url, :path)
+
+This macro relies on two dynamic variables being bound:
+
+- neo--extensions-emblem-path: a path to an emblem file, that might or
+  might not exist. It never exist for aggregate digests, it might exist
+  for individual manifests.
+- neo--extensions: a hash table where we store extensions
+"
   (let* ((name (plist-get args :name))
 	 (title (plist-get args :title))
 	 (normalized-name (neo--normalize-name name))
@@ -366,18 +317,19 @@ Args:
          (desc (plist-get args :description))
          (cats (plist-get args :categories))
          (tags (plist-get args :keywords))
-	 (emblem (plist-get args :emblem))
-         (requires (plist-get args :requires))
-         (provides (plist-get args :provides))
-         (depends-on (plist-get args :depends-on))
+;;	 (emblem (or (plist-get args :emblem) neo--extensions-emblem-path))
+	 (emblem (or (plist-get args :emblem) (neo--read-binary-string-safe neo--extensions-emblem-path)))
+	 (requires (plist-get args :requires))
+	 (provides (plist-get args :provides))
+	 (depends-on (plist-get args :depends-on))
 	 (require-list (if (listp requires) requires (list requires)))
-         (provide-list (if (listp provides) provides (list provides)))
-         (depend-list (if (listp depends-on) depends-on (list depends-on)))
-         (repo-raw (plist-get args :repository))
-         (repo (make-neo/repository
-                 :type (plist-get repo-raw :type)
-                 :url (plist-get repo-raw :url)
-                 :path (plist-get repo-raw :path)))
+	 (provide-list (if (listp provides) provides (list provides)))
+	 (depend-list (if (listp depends-on) depends-on (list depends-on)))
+	 (repo-raw (plist-get args :repository))
+	 (repo (make-neo/repository
+		:type (plist-get repo-raw :type)
+		:url (plist-get repo-raw :url)
+		:path (plist-get repo-raw :path)))
 	 (extension (make-neo/extension
 		     :name name
 		     :title title
@@ -391,7 +343,7 @@ Args:
 		     :depends-on depend-list
 		     :repository repo
 		     :summary-overlay nil))
-         (slug (neo--extension-slug extension)))
+	 (slug (neo--extension-slug extension)))
     `(puthash ,(neo/extension-slug-to-string slug) ,extension neo--extensions)))
 
 (defun neo--development-emacs-directory ()
@@ -410,11 +362,9 @@ $HOME/.local/share/wtrees/<anything>/devex/editors/emacs/."
   "Return the base directory containing extension sources.
 In development mode, this includes the extra 'extensions' subdirectory.
 In production (installed) mode, it is flattened."
-  (expand-file-name
-   (if (neo--development-emacs-directory)
-       "extensions/extensions/"
-     "extensions/")
-   user-emacs-directory))
+  (if (neo--development-emacs-directory)
+      (expand-file-name "extensions/extensions/" user-emacs-directory)
+    (neo/cache-file-path "extensions/current/extensions/")))
 
 (defun neo--load-extensions-manifest ()
   "Load extension manifests from EXTENSIONS-SUMMARY-FILE.
@@ -449,7 +399,7 @@ This populates a temporary `neo--extensions` and returns it."
   "Return a list of HT keys reachable from ROOTS following `requires`.
 HT is key->struct hash table. ROOTS is a list of key strings.
 ON-MISSING controls behavior when a required key is not in HT:
-  'error, 'warn, or 'ignore.
+'error, 'warn, or 'ignore.
 This returns the list of reachable keys (order unspecified)."
   (let ((seen (make-hash-table :test 'equal))
         (stack (copy-sequence roots))
@@ -496,12 +446,12 @@ collects the transitive closure of ROOTS following `requires` and
 then returns a topological ordering of that induced subgraph.
 
 PLIST options:
-  :on-missing  one of 'error (default), 'warn, or 'ignore
-  :on-cycle    one of 'error (default), 'warn, or 'ignore
-  :return      one of 'keys (default) or 'structs
+:on-missing  one of 'error (default), 'warn, or 'ignore
+:on-cycle    one of 'error (default), 'warn, or 'ignore
+:return      one of 'keys (default) or 'structs
 
 Return: list of keys or structs in topological order (dependencies
-appear before dependents).  If a cycle is detected, behavior depends
+						      appear before dependents).  If a cycle is detected, behavior depends
 on :on-cycle (see above)."
   (let* ((on-missing (or (plist-get plist :on-missing) 'error))
          (on-cycle   (or (plist-get plist :on-cycle) 'error))
@@ -565,48 +515,6 @@ on :on-cycle (see above)."
             (mapcar (lambda (k) (gethash k ht)) result-keys)
           result-keys)))))
 
-
-
-;; (defun neo--load-extension (ext)
-;;   (let* ((publisher (neo/extension-publisher ext))
-;; 	 (name (neo--normalize-name (neo/extension-name ext)))
-;; 	 (base (expand-file-name "extensions/" user-emacs-directory))
-;;          (file (expand-file-name (format "%s/%s/%s.el" publisher name name) base)))
-;;     (message (format "Loading %s/%s from %s" publisher name file))
-;;     (load file)))
-
-;; TODO here we cheat and relay on the fact that for testing we have
-;; the user-emacs-directory pointing into the repo. But this means we
-;; have two levels of 'extensions'
-;; (defun neo--load-extension (ext)
-;;   "Load the extension file for EXT.
-;; Logs errors to *Messages* but never signals. Returns non-nil on success.
-;; Temporarily adds the file's directory to `load-path` so `require` works."
-;;   (let* ((publisher (neo/extension-publisher ext))
-;;          (name      (neo--normalize-name (neo/extension-name ext)))
-;;          (base      (expand-file-name "extensions/extensions/" user-emacs-directory))
-;;          (file-dir  (expand-file-name (format "%s/%s" publisher name) base))
-;;          (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
-;;     (let ((res
-;;            (condition-case err
-;;                ;; Temporarily add file-dir to load-path
-;;                (let ((load-path (cons file-dir load-path)))
-;;                  ;; NOERROR=t prevents file-not-found from signaling.
-;;                  ;; NOMESSAGE='nomessage keeps `load` quiet; we log ourselves.
-;;                  (load file t 'nomessage 'nosuffix))
-;;              (error
-;;               (message "[neo] Error while loading %s: %s"
-;;                        file (error-message-string err))
-;;               :error))))
-;;       (cond
-;;        ((eq res :error) nil)
-;;        ((null res)
-;;         (neo/log-warn "[neo] Extension file not found: %s" file)
-;;         nil)
-;;        (t
-;;         (neo/log-info "[neo] Loaded %s" file)
-;;         t)))))
-
 ;; TODO here we cheat and relay on the fact that for testing we have
 ;; the user-emacs-directory pointing into the repo. But this means we
 ;; have two levels of 'extensions'
@@ -624,13 +532,9 @@ Returns non-nil on successful load, nil if file does not exist."
          (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
     (if (not (file-exists-p file))
 	nil
-       ;; (progn
-       ;;    (neo/log-warn "[neo] Extension file not found: %s" file)
-       ;;    nil)
-      ;; File exists → errors must signal
       (let ((load-path (cons file-dir load-path)))
         (load file nil 'nomessage 'nosuffix)
-;        (neo/log-info "[neo] Loaded %s" file)
+					;        (neo/log-info "[neo] Loaded %s" file)
         t))))
 
 (require 'cl-macs) ; for cl-macrolet
@@ -650,15 +554,6 @@ The original `neo/use-package' is restored afterwards."
       ;; Restore original macro
       (fset 'neo/use-package orig))))
 
-
-;; (defun neo/refresh-package-archives ()
-;;   (unless (and (boundp 'package-archive-contents)
-;;                package-archive-contents)
-;;     (let ((package-user-dir
-;; 	   (expand-file-name "emacs/package.el/"
-;;                              (or (getenv "XDG_CACHE_HOME")
-;; 				 "~/.cache"))))
-;;       (package-refresh-contents))))
 
 (defun neo/refresh-package-archives ()
   (unless (and (boundp 'package-archive-contents)
@@ -716,7 +611,7 @@ AVAILABLE-EXTENSIONS hash table (defaulting to `neo--extensions`), and loads it 
 (defun neo/fetch-extensions ()
   "Download and cache the latest neo-extensions.el manifest and repository content.
 Manifest goes to ~/.cache/<instance>/extensions/<SHA>/extensions.el (symlinked to current).
-Repository content goes to <user-emacs-directory>/extensions (if not in dev mode)."
+Repository content goes to ~/.cache/<instance>/extensions/<SHA>/extensions/ (if not in dev mode)."
   (unless (neo--development-emacs-directory)
     (let* ((base-url "https://github.com/poly-repo/neo-extensions/releases/download/latest/")
            (filename "neo-extensions.el")
@@ -746,7 +641,7 @@ Repository content goes to <user-emacs-directory>/extensions (if not in dev mode
         (unless (file-exists-p target-file)
           (message "Downloading extensions manifest version %s..." sha)
           (make-directory sha-dir t)
-          (url-copy-file file-url target-file t)
+          (url-copy-file file-url target-file t)xa
           (setq manifest-updated t)
           (message "Manifest downloaded."))
         
@@ -758,7 +653,7 @@ Repository content goes to <user-emacs-directory>/extensions (if not in dev mode
         (delete-file temp-sha)
 
         ;; Fetch repository content if needed
-        (let ((repo-dir (expand-file-name "extensions" user-emacs-directory)))
+        (let ((repo-dir (expand-file-name "extensions" sha-dir)))
           (when (or manifest-updated (not (file-exists-p repo-dir)))
             (message "Downloading extensions repository...")
             (let* ((repo-url "https://github.com/poly-repo/neo-extensions/archive/refs/heads/main.tar.gz")
@@ -805,6 +700,145 @@ removes it afterward."
         (when (file-exists-p neo/extensions-lock-file)
           (delete-file neo/extensions-lock-file))))))
 
+
+;;; New implementation
+
+(cl-defstruct neo--extension-registry
+  "Represents the source location of an extension repository."
+  name
+  url
+  override)
+
+(defun neo/get-remote-commit-sha (registry)
+  "Fetch the latest commit SHA for REGISTRY from its remote URL."
+  (let* ((url (neo--extension-registry-url registry))
+         ;; Run git ls-remote and capture the output
+         (output (shell-command-to-string 
+                  (format "git ls-remote %s main" url))))
+    (if (string-match "^\\([a-f0-9]\\{40\\}\\)" output)
+        (match-string 1 output)
+      (error "Could not retrieve SHA for %s" url))))
+
+(defun neo--archive-url (registry commit-sha)
+  (let* ((repo-url (neo--extension-registry-url registry))
+	 (base-url (replace-regexp-in-string "\\.git\\'" "" repo-url))
+         (download-url (format "%s/archive/%s.tar.gz" base-url commit-sha)))
+    download-url))
+
+;; TODO maybe we should add commit-sha ourselves
+(defun neo--download-github-tarfile (registry commit-sha target-dir)
+  "Download REPO-URL at COMMIT-SHA, untar to TARGET-DIR stripping STRIP-LEVELS.
+
+We assume that target-dir contains commit-sha"
+  (if (file-directory-p target-dir)
+      (message "Registry content already exists at %s; skipping download." target-dir)
+(make-directory target-dir t)
+(let ((temp-file (make-temp-file "neo-" nil ".tar.gz")))
+  (unwind-protect
+      (progn
+        ;; --- BODY ---
+        ;; 1. Download to temp-file
+        ;; 2. Untar temp-file
+	(url-copy-file (neo--archive-url registry commit-sha) temp-file t)
+	(let ((default-directory (expand-file-name target-dir)))
+	  (message "Expanding in %s" default-directory)
+	  (call-process "tar" nil nil nil 
+	                "-xzf" temp-file 
+	                "--strip-components=3")))
+    (when (file-exists-p temp-file)
+      (delete-file temp-file)
+      (message "Deleted %s" temp-file))))))
+
+;; TODO we should probably update a symlink to current and return that instead
+(defun neo/download-registry-content (registry commit-sha)
+  (let ((content-directory (neo/cache-file-path (format "extensions/%s/%s" (neo--extension-registry-name registry) commit-sha))))
+    (neo--download-github-tarfile registry commit-sha content-directory)
+    content-directory))
+
+(defun neo/download-latest-registry-content (registry)
+  "Download the full content of the registry, unless an override is provided."
+  (if (neo--extension-registry-p registry)
+      (if (neo--extension-registry-override registry)
+	  (neo--extension-registry-override registry)
+	(neo/download-registry-content registry (neo/get-remote-commit-sha registry)))
+    (error "Object is not a neo--extension-registry struct")))
+
+(defvar neo/extension-registry-alist nil
+  "Master list of all extension registries.")
+
+(defun neo/register-registry (name url &optional override)
+  "Create a new registry struct and add it to `neo/extension-registry-alist`."
+  (let ((registry (make-neo--extension-registry
+                   :name name
+                   :url url
+                   :override override)))
+    ;; Use push or setf with alist-get to update the global list
+    (setf (alist-get name neo/extension-registry-alist nil nil #'string=) 
+          registry)
+    registry))
+
+;; TODO this probably goes elsewhere
+(neo/register-registry 
+ "neo" 
+ "https://github.com/poly-repo/neo-extensions.git"
+ (when (string= (neo/get-emacs-instance-name) "neo-devel")
+   (expand-file-name "extensions/extensions/neo" user-emacs-directory)))
+
+(defun neo--populate-extensions-from-file (file extensions-table)
+  "Load FILE and populate EXTENSIONS-TABLE. Return t if successful."
+  (let ((file-path (expand-file-name file user-emacs-directory)))
+    (when (file-exists-p file-path)
+      ;; We bind neo--extensions locally so the loaded file 
+      ;; (which uses sethash indirectly) targets our table.
+      (dlet ((neo--extensions extensions-table)
+	     (neo--extensions-emblem-path (expand-file-name "emblem64.png" (file-name-directory file-path))))
+        (load file-path t t)))))
+
+(defun neo--load-all-sub-manifests (root-dir combined-table)
+  "Scan ROOT-DIR/*/manifest.el and add extensions to COMBINED-TABLE."
+  (let ((full-root (expand-file-name root-dir)))
+    (when (file-directory-p full-root)
+      ;; 1. Get all subdirectories (excluding . and ..)
+      (let ((subdirs (directory-files full-root t "^[^.]")))
+        (dolist (dir subdirs)
+          (when (file-directory-p dir)
+            (let ((manifest-path (expand-file-name "manifest.el" dir)))
+              ;; 2. If manifest exists, populate the table
+              (when (file-exists-p manifest-path)
+                (neo--populate-extensions-from-file manifest-path combined-table)))))))
+    combined-table))
+
+(defun neo--load-local-manifest (registry combined-table)
+  (let ((root-dir (neo--extension-registry-override registry)))
+    (neo--load-all-sub-manifests root-dir combined-table)))
+
+(defun neo--load-remote-manifest (registry combined-table)
+  (let* ((repo-url (neo--extension-registry-url registry))
+	 (base-url (replace-regexp-in-string "\\.git\\'" "" repo-url))
+         (download-url (format "%s/releases/download/latest/neo-extensions.el" base-url))
+	 (local-file-path (neo/cache-file-path "neo-extensions.el")))
+    (url-copy-file download-url (neo/cache-file-path "neo-extensions.el") t)
+    (neo--populate-extensions-from-file local-file-path combined-table)))
+
+(defun neo--load-combined-extensions-manifest (registry-alist)
+  "Load the digest for all available estensions in REGISTRY-ALIST."
+  (let ((combined-table (make-hash-table :test 'equal)))
+    (cl-loop for (name . registry) in registry-alist
+             do
+	     (if (neo--extension-registry-override registry)
+		 (neo--load-local-manifest registry combined-table)
+	       (neo--load-remote-manifest registry combined-table)))
+    combined-table))
+
+
+;;; For now we support a single registry. Later we'll traverse the
+;;; digest looking for dependencies in other registries. As long as we
+;;; don't have cycles in dependencies between extensions we should be
+;;; ok with registries circularly depending on each other.
+
+(defun neo/load-registry-content (registry-name)
+  (let ((registry (alist-get registry-name neo/extension-registry-alist nil nil #'string=)))
+    (neo/download-latest-registry-content registry)))
 
 (provide 'neo-extensions)
 

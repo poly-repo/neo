@@ -45,6 +45,9 @@ This variable is used by `neo/paraphenalia` to determine visibility of UI compon
              (expand-file-name "core" (file-name-directory (or load-file-name buffer-file-name))))
 (require 'neo-early-init-utils)
 
+;; TODO move inside neo-early-init-utils
+(defvar neo/first-run (not (file-exists-p (format "~/.config/%s/current-profile/neo.sqlite" (neo/get-emacs-instance-name)))))
+			   
 (eval-and-compile
   (defvar neo/cache-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CACHE_HOME") "~/.cache")))
   (defvar neo/config-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.config"))))

@@ -6,9 +6,10 @@
 
 (defun neo--read-binary-string-safe (file)
   "Return FILE contents as a raw string suitable for embedding in Emacs Lisp."
-  (with-temp-buffer
-    (insert-file-contents-literally file)
-    (buffer-string)))  ;; return raw string, no quoting here
+  (when (file-exists-p file)
+    (with-temp-buffer
+      (insert-file-contents-literally file)
+      (buffer-string))))  ;; return raw string, no quoting here
 
 (defun neo--collect-extension-forms (base-dir)
   "Find all manifest.el files two levels deep and embed their emblems."

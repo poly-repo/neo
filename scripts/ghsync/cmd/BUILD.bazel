@@ -1,0 +1,18 @@
+load("//build/bzl:python.bzl", "o_py_library")
+
+o_py_library(
+    name = "cmd_lib",
+    srcs = [
+        "__init__.py",
+        "model.py",
+        "schema.py",
+        "sync.py",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//infra/tools/ghsync/utils:utils_lib",
+        "@pip//click",
+        "@pip//requests",
+        "@pip//rich",
+    ],
+)

@@ -19,10 +19,18 @@
 (defun neo--make-framework-from-cache (&optional instance)
   "Create a `neo-framework' populated from cache for INSTANCE.
 If no cache exists, create empty hash tables for the slots."
-  (let* ((available (neo--load-extensions-manifest))
+  (let* ((available (neo--load-combined-extensions-manifest neo/extension-registry-alist))
          (installed (make-hash-table :test 'equal)))
     (make-neo-framework :available-extensions available
                         :installed-extensions installed)))
+
+;; (defun neo--make-framework-from-cache (&optional instance)
+;;   "Create a `neo-framework' populated from cache for INSTANCE.
+;; If no cache exists, create empty hash tables for the slots."
+;;   (let* ((available (neo--load-extensions-manifest))
+;;          (installed (make-hash-table :test 'equal)))
+;;     (make-neo-framework :available-extensions available
+;;                         :installed-extensions installed)))
 
 (defun neo--framework-instance ()
   "Return the global `neo-framework' singleton, creating it from cache if needed."
