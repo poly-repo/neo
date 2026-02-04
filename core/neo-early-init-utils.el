@@ -139,6 +139,7 @@ Return value is non-nil if THING should be shown, nil otherwise."
   (require 'neo-config)
   (neo/set-config "enabled-extensions" "(\"neo:full-monty\")")
   (neo/set-config "pretend-new-user" "nil")
+  (neo/set-config "paraphenalia-config" "()")
   (if (fboundp 'restart-emacs)
       (restart-emacs)
     (save-buffers-kill-emacs)))
