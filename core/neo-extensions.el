@@ -317,7 +317,7 @@ This macro relies on two dynamic variables being bound:
          (desc (plist-get args :description))
          (cats (plist-get args :categories))
          (tags (plist-get args :keywords))
-;;	 (emblem (or (plist-get args :emblem) neo--extensions-emblem-path))
+	 ;;	 (emblem (or (plist-get args :emblem) neo--extensions-emblem-path))
 	 (emblem (or (plist-get args :emblem) (neo--read-binary-string-safe neo--extensions-emblem-path)))
 	 (requires (plist-get args :requires))
 	 (provides (plist-get args :provides))
@@ -346,25 +346,25 @@ This macro relies on two dynamic variables being bound:
 	 (slug (neo--extension-slug extension)))
     `(puthash ,(neo/extension-slug-to-string slug) ,extension neo--extensions)))
 
-(defun neo--development-emacs-directory ()
-  "Return non-nil if `user-emacs-directory' matches
-$HOME/.local/share/wtrees/<anything>/devex/editors/emacs/."
-  (let* ((home (file-name-as-directory (expand-file-name "~")))
-	 (pattern (rx-to-string
-		   `(seq
-		     ,(regexp-quote home)
-		     ".local/share/wtrees/"
-		     (+ (not (any "/"))) ; arbitrary single directory
-		     "/devex/editors/emacs/"))))
-    (string-match-p pattern user-emacs-directory)))
+;; (defun neo--development-emacs-directory ()
+;;   "Return non-nil if `user-emacs-directory' matches
+;; $HOME/.local/share/wtrees/<anything>/devex/editors/emacs/."
+;;   (let* ((home (file-name-as-directory (expand-file-name "~")))
+;; 	 (pattern (rx-to-string
+;; 		   `(seq
+;; 		     ,(regexp-quote home)
+;; 		     ".local/share/wtrees/"
+;; 		     (+ (not (any "/"))) ; arbitrary single directory
+;; 		     "/devex/editors/emacs/"))))
+;;     (string-match-p pattern user-emacs-directory)))
 
 (defun neo--extensions-base-dir ()
   "Return the base directory containing extension sources.
 In development mode, this includes the extra 'extensions' subdirectory.
 In production (installed) mode, it is flattened."
-  (if (neo--development-emacs-directory)
+  (if (string= (neo/get-emacs-instance-name) "neo-devel") ; neo--development-emacs-directory)
       (expand-file-name "extensions/extensions/" user-emacs-directory)
-    (neo/cache-file-path "extensions/current/extensions/")))
+    (neo/cache-file-path "extensions")))
 
 (defun neo--load-extensions-manifest ()
   "Load extension manifests from EXTENSIONS-SUMMARY-FILE.
@@ -515,6 +515,10 @@ on :on-cycle (see above)."
             (mapcar (lambda (k) (gethash k ht)) result-keys)
           result-keys)))))
 
+(defun neo--extension-dir (base publisher extension-name)
+  (let ((current (if (string= (neo/get-emacs-instance-name) "neo-devel") "/" "/current/")))
+    (expand-file-name (format "%s%s%s" publisher current extension-name) base)))
+
 ;; TODO here we cheat and relay on the fact that for testing we have
 ;; the user-emacs-directory pointing into the repo. But this means we
 ;; have two levels of 'extensions'
@@ -528,7 +532,7 @@ Returns non-nil on successful load, nil if file does not exist."
   (let* ((publisher (neo/extension-publisher ext))
          (name      (neo--normalize-name (neo/extension-name ext)))
          (base      (neo--extensions-base-dir))
-         (file-dir  (expand-file-name (format "%s/%s" publisher name) base))
+         (file-dir  (neo--extension-dir base publisher name)) ;(expand-file-name (format "%s/current/%s" publisher name) base))
          (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
     (if (not (file-exists-p file))
 	nil
@@ -760,8 +764,12 @@ We assume that target-dir contains commit-sha"
   (if (neo--extension-registry-p registry)
       (if (neo--extension-registry-override registry)
 	  (neo--extension-registry-override registry)
-	(neo/download-registry-content registry (neo/get-remote-commit-sha registry)))
+	(let* ((latest-registry-content (neo/download-registry-content registry (neo/get-remote-commit-sha registry)))
+	       (parent-dir (file-name-directory (directory-file-name latest-registry-content)))
+               (link-path (expand-file-name "current" parent-dir)))
+	  (make-symbolic-link latest-registry-content link-path t)))
     (error "Object is not a neo--extension-registry struct")))
+
 
 (defvar neo/extension-registry-alist nil
   "Master list of all extension registries.")
@@ -836,9 +844,13 @@ We assume that target-dir contains commit-sha"
 ;;; don't have cycles in dependencies between extensions we should be
 ;;; ok with registries circularly depending on each other.
 
-(defun neo/load-registry-content (registry-name)
-  (let ((registry (alist-get registry-name neo/extension-registry-alist nil nil #'string=)))
-    (neo/download-latest-registry-content registry)))
+(defun neo--refresh-registry-content (registry-name)
+  (let* ((registry (alist-get registry-name neo/extension-registry-alist nil nil #'string=))
+	 (commit-sha (neo/get-remote-commit-sha registry))
+	 (content-directory (neo/cache-file-path (format "extensions/%s/%s" (neo--extension-registry-name registry) commit-sha)))
+	 (develp (string= (neo/get-emacs-instance-name) "neo-devel")))
+    (unless (or develp (file-directory-p content-directory))
+      (neo/download-latest-registry-content registry))))
 
 (provide 'neo-extensions)
 

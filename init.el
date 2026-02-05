@@ -49,13 +49,17 @@
 
 ;; TODO not sure if needed. I think I had problems with lexical binding
 					;(require 'neo-early-init-utils)
-(if neo/first-run
-    (display-startup-screen)
+(defun neo--startup ()
   (require 'neo)
   (elpaca-wait)
   (simple-modeline-mode 1)
   (persp-switch "*dashboard*")
   (neo/dashboard))
+  
+(if neo/first-run
+    (display-startup-screen)
+  (neo--startup))
+
 
 ;; TODO when not first run and we don't have a context saved we should probably
 ;; show the dashboard if available
@@ -64,8 +68,8 @@
 					;  (when (fboundp 'neo/dashboard)
 					;    (neo/dashboard)))
 
-(add-hook 'emacs-startup-hook
-	  (lambda ()
-	    (when (and (not inhibit-startup-screen)
-		       (not initial-buffer-choice))
-	      (display-startup-screen))))
+;; (add-hook 'emacs-startup-hook
+;; 	  (lambda ()
+;; 	    (when (and (not inhibit-startup-screen)
+;; 		       (not initial-buffer-choice))
+;; 	      (display-startup-screen))))
