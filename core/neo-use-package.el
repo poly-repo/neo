@@ -49,17 +49,36 @@ This involves removing `:doc` keywords and replacing `:builtin` with `:ensure ni
 	 (args (neo--alist->sectioned-list args-alist)))
     args))
 
+(defun neo/get-parent-directory-at-level (path n)
+  "Return the name of the directory N levels above PATH."
+  (let ((current-path (expand-file-name path)))
+    ;; Climb N levels up
+    (dotimes (_ n)
+      (setq current-path (file-name-directory (directory-file-name current-path))))
+    ;; At this point current-path is "/home/mav/.cache/neo/extensions/neo/"
+    ;; We need to return just 'neo', so we strip the trailing slash and get the tail
+    (file-name-nondirectory (directory-file-name current-path))))
+
 ;; TODO this is very hacky. When working in Omega grand-parent for this file is emacs.
 ;; but when deployed, it will be the name of the user init directory, typically neo
+;; (defun neo--publisher-name ()
+;;   "Return the name of the directory two levels above PATH, or nil if none.
+;; That corresponds to the publisher of an extension."
+;;   (let* ((file (or load-file-name buffer-file-name))
+;; 	 (dir (directory-file-name (or (file-name-directory file) "")))
+;;          (parent (file-name-directory dir)))
+;;     (when parent
+;;       (let ((grand-parent (file-name-nondirectory (directory-file-name parent))))
+;;         (unless (string= grand-parent "") grand-parent)))))
+
 (defun neo--publisher-name ()
   "Return the name of the directory two levels above PATH, or nil if none.
 That corresponds to the publisher of an extension."
   (let* ((file (or load-file-name buffer-file-name))
-	 (dir (directory-file-name (or (file-name-directory file) "")))
-         (parent (file-name-directory dir)))
-    (when parent
-      (let ((grand-parent (file-name-nondirectory (directory-file-name parent))))
-        (unless (string= grand-parent "") grand-parent)))))
+	 (publisher (neo/get-parent-directory-at-level file 2)))
+    (if (string= publisher "current")
+	(neo/get-parent-directory-at-level file 3)
+      publisher)))
 
 (defun neo--author-name ()
   "Return the name of the directory containing FILE."
@@ -87,7 +106,7 @@ immediately executed, otherwise the raw `use-package` form is stored in
 `neo--enabled-packages` indexed by (user . extension-base-name)."
   (declare (indent defun))
   (let* ((ensure (if (string= name "emacs") (list :ensure nil) '()))
-;         (args (append (neo/filter-package-args args) ensure))
+					;         (args (append (neo/filter-package-args args) ensure))
          (args (append (neo--normalize-use-package-arguments args) ensure))
          (file (or load-file-name buffer-file-name "unknown"))
          (user (neo--publisher-name))
