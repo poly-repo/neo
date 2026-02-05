@@ -144,6 +144,18 @@ Return value is non-nil if THING should be shown, nil otherwise."
       (restart-emacs)
     (save-buffers-kill-emacs)))
 
+(defun neo--make-image-label (filename &optional scale)
+  "Create a display label from FILENAME in the NEO assets directory.
+Optional SCALE defaults to 1.0."
+  (let ((img (create-image (expand-file-name filename neo--core-dir) nil nil 
+                           :scale (or scale 1.0) 
+                           :ascent 'center)))
+    (propertize " " 'display img 'rear-nonsticky t)))
+
+(defvar neo--intro "
+The Red Pill: Full NEO initiation. Unleash a YOLO-tuned, monorepo-shredding environment where the Elisp is hot and the constraints are non-existent.\n\nThe Blue Pill: Return to Vanilla Emacs. A safe, beige, and blissfully \"productive\" purgatory where nothing exciting ever happens. You can still install add-ons manually, but you’ll be doing it in a world of lukewarm water and default keybindings.
+")
+
 (defun neo/full-monty (_button)
   "Ask for confirmation before going full monty."
   (let ((buf (get-buffer-create "*Neo YOLO*"))
@@ -151,22 +163,29 @@ Return value is non-nil if THING should be shown, nil otherwise."
         (wconf (current-window-configuration)))
     (with-current-buffer buf
       (erase-buffer)
+      (setq cursor-type nil)
+      (insert-button (neo--make-image-label "red-pill128.png" .8) ;"[ RED PILL ]"
+		     'action #'neo/full-monty-confirm
+		     'follow-link t
+		     'face 'default      ; Removes the underline
+                     'mouse-face nil     ; Removes the hover highlighting
+		     'help-echo "Wake up, Neo.")
       (when (file-exists-p image-file)
-        (insert-image (create-image image-file))
-        (insert "\n\n"))
-      (insert-button "Yes, I really want to do this!"
-                     'action #'neo/full-monty-confirm
-                     'follow-link t)
-      (insert "   ")
-      (insert-button "No, get me out of here"
-                     'action (lambda (b)
+        (insert-image (create-image image-file)))
+      (insert-button (neo--make-image-label "blue-pill128.png" .5) ;"[ BLUE PILL ]"
+		     'action (lambda (b)
                                (let ((saved-wconf (button-get b 'wconf)))
-                                 (kill-buffer (current-buffer))
-                                 (when saved-wconf (set-window-configuration saved-wconf))))
-                     'wconf wconf
-                     'follow-link t))
-    (switch-to-buffer buf)
-    (delete-other-windows)))
+				 (kill-buffer (current-buffer))
+				 (when saved-wconf (set-window-configuration saved-wconf))))
+		     'face 'default      ; Removes the underline
+                     'mouse-face nil     ; Removes the hover highlighting
+		     'follow-link t
+		     'wconf wconf
+		     'help-echo "Back to sleep.")
+      (insert "\n\n")
+      (insert neo--intro)
+      (switch-to-buffer buf)
+      (delete-other-windows))))
 
 (defun neo/fancy-splash--replace-args (orig-fun &rest args)
   "Replace arguments to `fancy-splash-insert` if the second argument is the \"To start\" string."
