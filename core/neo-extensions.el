@@ -367,16 +367,9 @@ In production (installed) mode, it is flattened."
     (neo/cache-file-path "extensions")))
 
 (defun neo--load-extensions-manifest ()
-  "Load extension manifests from EXTENSIONS-SUMMARY-FILE.
+  "Load extension manifests from all registered registries.
 This populates a temporary `neo--extensions` and returns it."
-  (let ((neo--extensions (make-hash-table :test 'equal)))
-    (if (and (neo--development-emacs-directory)
-	     (or (neo/load-file (expand-file-name "extensions/current/extensions.el" user-emacs-directory) t)
-		 (neo/load-file (expand-file-name "extensions/build/extensions.el" user-emacs-directory) t)))
-	neo--extensions
-      (clrhash neo--extensions)
-      (neo/load-cached-file "extensions/current/extensions.el" t)
-      neo--extensions)))
+  (neo--load-combined-extensions-manifest neo/extension-registry-alist))
 
 (defun neo--sorted-extensions-by-name (extensions)
   "Return a list of `neo/extension` values sorted by name."
@@ -612,68 +605,49 @@ AVAILABLE-EXTENSIONS hash table (defaulting to `neo--extensions`), and loads it 
           (neo/log-warn 'core "  ❌ Extension %s not found in registry" slug-string))))))
 
 ;; TODO only fetch if older than X hours unless FORCE is used.
-(defun neo/fetch-extensions ()
-  "Download and cache the latest neo-extensions.el manifest and repository content.
-Manifest goes to ~/.cache/<instance>/extensions/<SHA>/extensions.el (symlinked to current).
-Repository content goes to ~/.cache/<instance>/extensions/<SHA>/extensions/ (if not in dev mode)."
-  (unless (neo--development-emacs-directory)
-    (let* ((base-url "https://github.com/poly-repo/neo-extensions/releases/download/latest/")
-           (filename "neo-extensions.el")
-           (sha-filename "neo-extensions.sha256")
-           (instance (neo/get-emacs-instance-name))
-           (cache-dir (expand-file-name (format "~/.cache/%s/" instance)))
-           (extensions-dir (expand-file-name "extensions/" cache-dir))
-           (temp-sha (make-temp-file "neo-sha" nil ".sha256"))
-           (sha-url (concat base-url sha-filename))
+(defun neo/fetch-extensions (registry)
+  "Download and cache the latest extensions manifest for REGISTRY.
+Manifest goes to ~/.cache/<instance>/extensions/<REGISTRY>/extensions-<SHA>.el.
+Repository content is also updated."
+  (unless (string= (neo/get-emacs-instance-name) "neo-devel")
+    (let* ((name (neo--extension-registry-name registry))
+           (url (neo--extension-registry-url registry))
+           ;; Base URL for releases: remove .git and add releases/download/latest/
+           (base-url (concat (replace-regexp-in-string "\\.git\\'" "" url) "/releases/download/latest/"))
+           (sha (neo/get-remote-commit-sha registry))
+           (filename (format "extensions-%s.el" sha))
+           (sha-filename (format "extensions-%s.el.sha256" sha))
+           (cache-dir (neo/cache-file-path (format "extensions/%s/" name)))
+           (target-file (expand-file-name filename cache-dir))
+           (target-sha-file (expand-file-name sha-filename cache-dir))
            (file-url (concat base-url filename))
-           (manifest-updated nil))
+           (sha-url (concat base-url sha-filename)))
       
-      (unless (file-directory-p extensions-dir)
-        (make-directory extensions-dir t))
+      (unless (file-directory-p cache-dir)
+        (make-directory cache-dir t))
 
-      (url-copy-file sha-url temp-sha t)
-      
-      (let* ((sha-content (with-temp-buffer
-                            (insert-file-contents temp-sha)
-                            (string-trim (buffer-string))))
-             ;; Take first word as SHA
-             (sha (car (split-string sha-content)))
-             (sha-dir (expand-file-name sha extensions-dir))
-             (target-file (expand-file-name "extensions.el" sha-dir))
-             (current-link (expand-file-name "current" extensions-dir)))
+      (unless (file-exists-p target-file)
+        (message "[neo] Downloading %s extensions manifest version %s..." name sha)
         
-        (unless (file-exists-p target-file)
-          (message "Downloading extensions manifest version %s..." sha)
-          (make-directory sha-dir t)
-          (url-copy-file file-url target-file t)xa
-          (setq manifest-updated t)
-          (message "Manifest downloaded."))
+        ;; Download SHA file (checksum)
+        (ignore-errors (delete-file target-sha-file))
+        (url-copy-file sha-url target-sha-file t)
         
-        ;; Update symlink
-        (let ((default-directory extensions-dir))
-          (ignore-errors (delete-file "current"))
-          (make-symbolic-link sha "current" t))
-        
-        (delete-file temp-sha)
+        ;; Download Manifest
+        (url-copy-file file-url target-file t)
+        (message "[neo] Manifest downloaded."))
 
-        ;; Fetch repository content if needed
-        (let ((repo-dir (expand-file-name "extensions" sha-dir)))
-          (when (or manifest-updated (not (file-exists-p repo-dir)))
-            (message "Downloading extensions repository...")
-            (let* ((repo-url "https://github.com/poly-repo/neo-extensions/archive/refs/heads/main.tar.gz")
-                   (tar-file (make-temp-file "neo-repo-" nil ".tar.gz")))
-              (url-copy-file repo-url tar-file t)
-              (message "Extracting extensions to %s..." repo-dir)
-              (when (file-exists-p repo-dir)
-                (delete-directory repo-dir t))
-              (make-directory repo-dir t)
-              (let ((exit-code (call-process "tar" nil nil nil "xf" tar-file "-C" repo-dir "--strip-components=2")))
-                (if (zerop exit-code)
-                    (message "Extensions repository installed.")
-                  (message "Error extracting tarball: exit code %d" exit-code)))
-              (delete-file tar-file))))
+      ;; Update symlinks
+      (let ((default-directory cache-dir))
+        (ignore-errors (delete-file "extensions-current.el"))
+        (make-symbolic-link filename "extensions-current.el" t)
+        (ignore-errors (delete-file "extensions-current.el.sha256"))
+        (make-symbolic-link sha-filename "extensions-current.el.sha256" t))
         
-        target-file))))
+      ;; Ensure repository content is also downloaded
+      (neo/download-registry-content registry sha)
+        
+      target-file)))
 
 (defun neo/fetch-extensions-config ()
   "Load user-specific configuration from the cache directory.
@@ -698,8 +672,10 @@ removes it afterward."
       ;; Create lock file
       (write-region "" nil neo/extensions-lock-file)
       (unwind-protect
-          ;; Call the real fetch function
-          (neo/fetch-extensions)
+          ;; Call the real fetch function for each registry
+          (mapc (lambda (entry)
+                  (neo/fetch-extensions (cdr entry)))
+                neo/extension-registry-alist)
         ;; Ensure the lock is removed afterward
         (when (file-exists-p neo/extensions-lock-file)
           (delete-file neo/extensions-lock-file))))))
@@ -827,12 +803,11 @@ We assume that target-dir contains commit-sha"
     (neo--load-all-sub-manifests root-dir combined-table)))
 
 (defun neo--load-remote-manifest (registry combined-table)
-  (let* ((repo-url (neo--extension-registry-url registry))
-	 (base-url (replace-regexp-in-string "\\.git\\'" "" repo-url))
-         (download-url (format "%s/releases/download/latest/neo-extensions.el" base-url))
-	 (local-file-path (neo/cache-file-path "neo-extensions.el")))
-    (url-copy-file download-url (neo/cache-file-path "neo-extensions.el") t)
-    (neo--populate-extensions-from-file local-file-path combined-table)))
+  (let* ((name (neo--extension-registry-name registry))
+         (cache-dir (neo/cache-file-path (format "extensions/%s/" name)))
+         (manifest-path (expand-file-name "extensions-current.el" cache-dir)))
+    (when (file-exists-p manifest-path)
+      (neo--populate-extensions-from-file manifest-path combined-table))))
 
 (defun neo--load-combined-extensions-manifest (registry-alist)
   "Load the digest for all available estensions in REGISTRY-ALIST."
