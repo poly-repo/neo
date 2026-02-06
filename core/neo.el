@@ -18,6 +18,7 @@
 (neo--require 'neo-packages)			; package management
 (neo--require 'neo-logging)
 (neo--require 'neo-framework)			; neo infra and core extension management
+(neo--require 'neo-application)
 
 (neo/set-emacs-source-directories)
 
