@@ -792,6 +792,12 @@ We assume that target-dir contains commit-sha"
  (when (string= (neo/get-emacs-instance-name) "neo-devel")
    (expand-file-name "extensions/extensions/neo" user-emacs-directory)))
 
+(neo/register-registry 
+ "mav" 
+ "https://github.com/poly-repo/mav-extensions.git"
+ (when (string= (neo/get-emacs-instance-name) "neo-devel")
+   (expand-file-name "extensions/extensions/mav" user-emacs-directory)))
+
 (defun neo--populate-extensions-from-file (file extensions-table)
   "Load FILE and populate EXTENSIONS-TABLE. Return t if successful."
   (let ((file-path (expand-file-name file user-emacs-directory)))
