@@ -23,8 +23,7 @@
 
 (use-package project :ensure t)
 
-(neo--refresh-registry-content "neo")	; TODO need to do for all declared registries
-(neo--refresh-registry-content "mav")	; TODO need to do for all declared registries
+(neo/maybe-fetch-extensions)
 
 (setq neo--framework (neo--framework-instance))
 (neo/bootstrap neo--framework)

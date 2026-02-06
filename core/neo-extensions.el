@@ -635,6 +635,15 @@ Repository content is also updated."
         
         ;; Download Manifest
         (url-copy-file file-url target-file t)
+        
+        ;; Check for invalid download (GitHub release 404 returns "Not Found")
+        (with-temp-buffer
+          (insert-file-contents target-file)
+          (goto-char (point-min))
+          (when (search-forward "Not Found" nil t)
+            (delete-file target-file)
+            (error "[neo] Failed to download manifest from %s (got 'Not Found')" file-url)))
+        
         (message "[neo] Manifest downloaded."))
 
       ;; Update symlinks
@@ -729,10 +738,14 @@ We assume that target-dir contains commit-sha"
       (delete-file temp-file)
       (message "Deleted %s" temp-file))))))
 
-;; TODO we should probably update a symlink to current and return that instead
+;; Update the 'current' symlink to point to this version
 (defun neo/download-registry-content (registry commit-sha)
   (let ((content-directory (neo/cache-file-path (format "extensions/%s/%s" (neo--extension-registry-name registry) commit-sha))))
     (neo--download-github-tarfile registry commit-sha content-directory)
+    (let* ((parent-dir (file-name-directory (directory-file-name content-directory)))
+           (link-path (expand-file-name "current" parent-dir)))
+      (ignore-errors (delete-file link-path))
+      (make-symbolic-link content-directory link-path t))
     content-directory))
 
 (defun neo/download-latest-registry-content (registry)
