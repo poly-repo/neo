@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+# Ehi, emacs, this is -*- python-mode -*-
 
 import argparse
 import concurrent.futures
