@@ -39,6 +39,30 @@
   :lighter " NeoApp"
   :keymap neo-application-mode-map)
 
+(defvar neo/application-forbidden-buffers nil
+  "List of buffer names that should be removed from the application perspective.")
+
+(defun neo/application--post-setup-cleanup (app-name)
+  "Cleanup windows showing scratch or messages after application setup.
+APP-NAME is the name of the application (without the 'App:' prefix)."
+  (let ((scratch-buffer-name (format "*scratch* (App:%s)" app-name))
+        (global-scratch "*scratch*")
+        (messages-buffer-name "*Messages*")
+        (warnings-buffer-name "*Warnings*"))
+    ;; Remove forbidden buffers from the perspective
+    (dolist (buf-name neo/application-forbidden-buffers)
+      (when-let ((buf (get-buffer buf-name)))
+        (persp-remove-buffer buf)))
+
+    ;; Delete windows showing scratch buffers or *Messages* or *Warnings*
+    (dolist (win (window-list))
+      (let ((buf-name (buffer-name (window-buffer win))))
+        (when (or (string= buf-name scratch-buffer-name)
+                  (string= buf-name global-scratch)
+                  (string= buf-name messages-buffer-name)
+                  (string= buf-name warnings-buffer-name))
+          (ignore-errors (delete-window win)))))))
+
 (defun neo/leave-current-application ()
   "Leave the current Neo application and run its teardown."
   (interactive)
@@ -86,12 +110,13 @@ Keywords arguments:
            (cond
             ((string= current-persp app-persp-name)
              (message "Already in application %s" ,name))
-            ((string-prefix-p "App:" current-persp)
-             (user-error "Cannot start application %s from within application %s" ,name current-persp))
             (t
-             (setq neo--last-user-perspective current-persp)
+             ;; Only update the last user perspective if we are NOT coming from another application
+             (unless (string-prefix-p "App:" current-persp)
+               (setq neo--last-user-perspective current-persp))
              (persp-switch app-persp-name)
              ,setup
+             (neo/application--post-setup-cleanup ,name)
              (neo-application-mode 1)))))
        ,@(when binding
            `((define-key neo/applications-map (kbd ,binding) #',cmd-name)))
