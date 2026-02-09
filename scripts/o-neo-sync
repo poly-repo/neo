@@ -7,12 +7,16 @@ from pathlib import Path
 import sys
 import subprocess
 import hashlib
+import shutil
+import re
 
 # Determine the project root relative to this script
 # Script is in devex/editors/emacs/scripts/o-neo-sync
 # Config root is devex/editors/emacs
 SCRIPT_DIR = Path(__file__).resolve().parent
 CONFIG_ROOT = SCRIPT_DIR.parent
+# Workspace root is 3 levels up from CONFIG_ROOT (devex/editors/emacs -> root)
+WORKSPACE_ROOT = CONFIG_ROOT.parent.parent.parent
 
 @click.command()
 @click.option('--devel', is_flag=True, help='Development mode sync.')
@@ -35,6 +39,8 @@ def cli(devel, vm):
                 os.remove(tar_path)
             except OSError:
                 pass
+    else:
+        perform_prod_sync()
 
 def perform_devel_sync():
     """Tar the content of the config directory (excluding extensions, scripts, and BUILD.bazel) to a temp file."""
@@ -142,6 +148,142 @@ def run_remote_command(vm_name, command):
         click.echo("Remote command executed successfully.")
     except subprocess.CalledProcessError as e:
         click.echo(f"Remote command failed: {e}", err=True)
+        sys.exit(1)
+
+# --- Production Sync Logic ---
+
+def perform_prod_sync():
+    """Perform production sync using Bazel and Copybara."""
+    targets = [
+        "//devex/editors/emacs/extensions/extensions/neo:neo-extensions",
+        "//devex/editors/emacs/extensions/extensions/mav:mav-extensions",
+        "//devex/editors/emacs:neo"
+    ]
+
+    # Ensure Copybara JAR is available
+    copybara_jar = ensure_copybara_jar()
+
+    for target in targets:
+        sync_target(target, copybara_jar)
+
+def ensure_copybara_jar():
+    """Ensure the Copybara JAR exists, building it if necessary."""
+    jar_rel_path = "bazel-bin/external/copybara+/java/com/google/copybara/copybara_deploy.jar"
+    jar_path = WORKSPACE_ROOT / jar_rel_path
+    
+    if not jar_path.exists():
+        click.echo("Copybara JAR not found. Building...")
+        run_bazel(["build", "@copybara//java/com/google/copybara:copybara_deploy.jar"])
+    
+    return jar_path
+
+def sync_target(target, copybara_jar):
+    """Sync a single Bazel target."""
+    click.echo(f"\nProcessing target: {target}")
+    
+    # Build the target
+    click.echo(f"Building {target}...")
+    run_bazel(["build", "--build_runfile_links", target])
+    
+    # Calculate path to copy.bara.sky
+    # Logic: bazel-bin/PACKAGE/copy.bara.sky
+    # target format //package:target
+    package = target.lstrip("/").split(":")[0]
+    config_path = WORKSPACE_ROOT / "bazel-bin" / package / "copy.bara.sky"
+    
+    if not config_path.exists():
+        click.echo(f"Error: Config file not found at {config_path}", err=True)
+        sys.exit(1)
+        
+    # Extract target_repo from config
+    target_repo = extract_target_repo(config_path)
+    if not target_repo:
+        click.echo(f"Error: Could not extract target_repo from {config_path}", err=True)
+        sys.exit(1)
+        
+    # Extract repo name for gh cli
+    # e.g., git@github.com:user/repo.git -> user/repo
+    # or https://github.com/user/repo.git -> user/repo
+    repo_relative = re.sub(r'.*[:/]([^/]+\/[^.]+)(\.git)?$', r'\1', target_repo)
+    
+    click.echo(f"Target Repo: {target_repo}")
+    click.echo(f"Repo Relative: {repo_relative}")
+    
+    # Check if repo exists
+    if check_repo_exists(repo_relative):
+        click.echo(f"Repository {repo_relative} exists. Syncing...")
+        run_copybara(copybara_jar, config_path, ["sync", "--ignore-noop"])
+    else:
+        click.echo(f"Repository {repo_relative} does not exist. Creating and initializing...")
+        create_and_init_repo(repo_relative, target_repo)
+        click.echo("Force pushing history from Copybara...")
+        run_copybara(copybara_jar, config_path, ["sync", "--force", "--init-history", "--ignore-noop"])
+
+def extract_target_repo(config_path):
+    """Extract the target_repo URL from the copy.bara.sky file."""
+    try:
+        with open(config_path, 'r') as f:
+            for line in f:
+                if line.strip().startswith("# target_repo ="):
+                    return line.split("=")[1].strip()
+    except Exception as e:
+        click.echo(f"Error reading config {config_path}: {e}", err=True)
+    return None
+
+def check_repo_exists(repo_relative):
+    """Check if the GitHub repository exists."""
+    try:
+        subprocess.run(
+            ["gh", "repo", "view", repo_relative],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+def create_and_init_repo(repo_relative, target_repo):
+    """Create a new GitHub repository and initialize it with an empty commit."""
+    # Create repo
+    subprocess.run(["gh", "repo", "create", repo_relative, "--public"], check=True)
+    
+    # Initialize with dummy commit
+    with tempfile.TemporaryDirectory() as work_dir:
+        click.echo(f"Initializing repo in temp dir {work_dir}")
+        wd = Path(work_dir)
+        subprocess.run(["git", "init"], cwd=wd, check=True)
+        subprocess.run(["git", "commit", "-m", f"first export of {repo_relative}", "--allow-empty"], cwd=wd, check=True)
+        subprocess.run(["git", "branch", "-M", "main"], cwd=wd, check=True)
+        subprocess.run(["git", "remote", "add", "origin", target_repo], cwd=wd, check=True)
+        subprocess.run(["git", "push", "-u", "origin", "main"], cwd=wd, check=True)
+
+def run_bazel(args):
+    """Run a Bazel command."""
+    cmd = ["bazel"] + args
+    try:
+        subprocess.run(cmd, cwd=WORKSPACE_ROOT, check=True)
+    except subprocess.CalledProcessError as e:
+        click.echo(f"Bazel command failed: {e}", err=True)
+        sys.exit(1)
+
+def run_copybara(jar_path, config_path, args):
+    """Run the Copybara JAR."""
+    cmd = ["java", "-jar", str(jar_path), str(config_path)] + args
+    
+    env = os.environ.copy()
+    ssh_key = Path.home() / ".ssh" / "github-poly-repo"
+    if ssh_key.exists():
+        click.echo(f"Using SSH key: {ssh_key}")
+        env["GIT_SSH_COMMAND"] = f"ssh -i {ssh_key}"
+    
+    try:
+        subprocess.run(cmd, cwd=WORKSPACE_ROOT, env=env, check=True)
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 4:
+            click.echo("No changes to sync (exit code 4). Skipping target.")
+            return
+        click.echo(f"Copybara failed: {e}", err=True)
         sys.exit(1)
 
 if __name__ == '__main__':
