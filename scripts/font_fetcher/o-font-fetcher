@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+# Ehi Emacs, this is -*- python -*-
+
+import argparse
+import os
+import re
+import sys
+import requests
+import zipfile
+from urllib.parse import urlparse
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+STYLES = {
+    100: 'Thin', 200: 'ExtraLight', 300: 'Light', 400: 'Regular',
+    500: 'Medium', 600: 'SemiBold', 700: 'Bold', 800: 'ExtraBold', 900: 'Black',
+}
+
+def nerd_download_family(family, font_dir):
+    print(f"[*] Fetching Nerd Font: {family}...")
+    base_url = 'https://github.com/ryanoasis/nerd-fonts/releases/latest'
+    try:
+        head = requests.head(base_url, allow_redirects=True, timeout=10)
+        latest_version = head.url.rsplit('/', 1)[-1]
+        
+        # Note: Nerd Fonts are case-sensitive and specific. 
+        # 'FontAwesome' might need to be 'FontLogos' or similar in newer versions.
+        download_url = f"https://github.com/ryanoasis/nerd-fonts/releases/download/{latest_version}/{family}.zip"
+        r = requests.get(download_url, timeout=20)
+        
+        if r.status_code == 404:
+            print(f"  [!] ERROR: '{family}.zip' not found. Check https://github.com/ryanoasis/nerd-fonts/releases")
+            return False
+
+        tmp_zip = f"/tmp/{family}.zip"
+        with open(tmp_zip, 'wb') as f:
+            f.write(r.content)
+
+        with zipfile.ZipFile(tmp_zip, "r") as zip_ref:
+            [zip_ref.extract(f, font_dir) for f in zip_ref.namelist() 
+             if f.lower().endswith(('.ttf', '.otf'))]
+        
+        os.remove(tmp_zip)
+        return True
+    except Exception as e:
+        print(f"  [!] ERROR: Failed to download {family}: {e}")
+        return False
+
+def google_download_family(family, font_dir):
+    print(f"[*] Fetching Google Font: {family}...")
+    base_url = 'https://fonts.googleapis.com/css2'
+    weights = '100;200;300;400;500;600;700;800;900'
+    url = f'{base_url}?family={family}:wght@{weights}&display=swap'
+    
+    headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'}
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code != 200 or 'src: url(' not in r.text:
+            print(f"  [!] ERROR: Google Font '{family}' not found.")
+            return False
+
+        # Find all blocks. We use a dictionary to keep only ONE url per weight.
+        rules = re.findall(r'font-weight:\s*(\d+);.*?src:\s*url\((https://[^)]+)\)', r.text, re.DOTALL)
+        
+        unique_weights = {}
+        for w, u in rules:
+            if w not in unique_weights:
+                unique_weights[w] = u
+
+        if not unique_weights:
+            print(f"  [!] ERROR: No downloadable URLs found.")
+            return False
+
+        for weight_str, dl_url in unique_weights.items():
+            weight = int(weight_str)
+            variant = STYLES.get(weight, f"Unknown-{weight}")
+            ext = os.path.splitext(urlparse(dl_url).path)[1] or ".woff2"
+            
+            filename = f"{family}-{variant}{ext}"
+            print(f"  [+] Downloading {filename}...")
+            
+            f_data = requests.get(dl_url, timeout=10).content
+            with open(os.path.join(font_dir, filename), 'wb') as f:
+                f.write(f_data)
+        return True
+    except Exception as e:
+        print(f"  [!] ERROR: Failed to process {family}: {e}")
+        return False
+
+def process_font_entry(entry, base_path):
+    if ':' not in entry:
+        print(f"  [!] ERROR: Invalid format '{entry}'. Expected 'FAMILY:SOURCE'")
+        return False
+
+    try:
+        family, source = entry.split(':')
+    except ValueError:
+        print(f"  [!] ERROR: Invalid format '{entry}'. Too many colons.")
+        return False
+
+    font_dir = base_path / source / family
+
+    if font_dir.exists() and any(font_dir.iterdir()):
+        print(f"[*] {family} ({source}): skipped")
+        return True
+
+    try:
+        font_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"  [!] ERROR: Could not create directory {font_dir}: {e}")
+        return False
+
+    if source.lower() == 'google':
+        return google_download_family(family, str(font_dir))
+    elif source.lower() == 'nerd':
+        return nerd_download_family(family, str(font_dir))
+    else:
+        print(f"  [!] ERROR: Unknown source '{source}' for family '{family}'")
+        return False
+
+def main():
+    parser = argparse.ArgumentParser(prog='font-fetcher')
+    parser.add_argument('base_dir', help='Target root directory')
+    parser.add_argument('font_sources', nargs='+', help='FONT:SOURCE pairs')
+    parser.add_argument('--workers', type=int, default=16, help='Number of parallel workers (default: 16)')
+
+    args = parser.parse_args()
+    base_path = Path(args.base_dir).expanduser()
+    
+    any_failures = False
+
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        future_to_entry = {executor.submit(process_font_entry, entry, base_path): entry for entry in args.font_sources}
+        
+        for future in as_completed(future_to_entry):
+            entry = future_to_entry[future]
+            try:
+                success = future.result()
+                if not success:
+                    any_failures = True
+            except Exception as exc:
+                print(f"  [!] ERROR: Entry {entry} generated an exception: {exc}")
+                any_failures = True
+
+    sys.exit(1 if any_failures else 0)
+
+if __name__ == '__main__':
+    main()

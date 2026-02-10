@@ -19,10 +19,13 @@
 (neo--require 'neo-logging)
 (neo--require 'neo-framework)			; neo infra and core extension management
 (neo--require 'neo-application)
+(neo--require 'neo-processes)
+(neo--require 'neo-fonts)
 
 (neo/set-emacs-source-directories)
 
-(use-package project :ensure t)
+(setq load-prefer-newer t)
+;(use-package project :ensure t)
 
 (neo/maybe-fetch-extensions)
 
