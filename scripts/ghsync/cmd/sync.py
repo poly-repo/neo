@@ -2,6 +2,7 @@ import click
 from rich import print
 import requests
 import json
+from datetime import datetime, timezone
 
 from infra.tools.ghsync.utils.auth import get_password
 from infra.tools.ghsync.utils.db import (
@@ -95,6 +96,9 @@ def get_issues(owner: str, repo: str, db_conn, force: bool = False):
         )
         return None
 
+    # Capture start time
+    start_time = datetime.now(timezone.utc).isoformat()
+
     etag = None
     since = None
     if not force:
@@ -154,6 +158,7 @@ def get_issues(owner: str, repo: str, db_conn, force: bool = False):
             repository=repo,
             endpoint=endpoint_name,
             etag=first_response_etag,
+            timestamp=start_time,
         )
 
     if all_issues:
@@ -184,6 +189,9 @@ def get_labels(owner: str, repo: str, db_conn, force: bool = False):
             f"Repository '{repo_full_name}' not found in the database. Please sync repositories first."
         )
         return None
+
+    # Capture start time
+    start_time = datetime.now(timezone.utc).isoformat()
 
     etag = None
     if not force:
@@ -240,6 +248,7 @@ def get_labels(owner: str, repo: str, db_conn, force: bool = False):
             repository=repo,
             endpoint=endpoint_name,
             etag=first_response_etag,
+            timestamp=start_time,
         )
 
     if all_labels:
