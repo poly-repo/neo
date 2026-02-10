@@ -138,10 +138,11 @@ def get_sync_metadata(conn, user, repository, endpoint):
     return {"etag": None, "last_sync_timestamp": None}
 
 
-def update_sync_metadata(conn, user, repository, endpoint, etag):
+def update_sync_metadata(conn, user, repository, endpoint, etag, timestamp=None):
     """Updates or inserts sync metadata into the database."""
     cursor = conn.cursor()
-    timestamp = datetime.now(timezone.utc).isoformat()
+    if timestamp is None:
+        timestamp = datetime.now(timezone.utc).isoformat()
     cursor.execute(
         """
         INSERT INTO sync_metadata (user, repository, endpoint, etag, last_sync_timestamp)

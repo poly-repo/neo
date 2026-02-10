@@ -11,6 +11,7 @@ import time
 import warnings
 from pathlib import Path
 from urllib.parse import urljoin
+from datetime import datetime, timezone
 
 # Suppress requests charset warning
 warnings.filterwarnings("ignore", message="Unable to find acceptable character detection dependency")
@@ -283,6 +284,9 @@ def _sync_issues(client, conn, owner, repo, force):
         logger.warning(f"Repository {repo_full_name} not found in DB. Skipping issues.")
         return
 
+    # Capture start time before any API requests to avoid missing updates that happen during sync
+    start_time = datetime.now(timezone.utc).isoformat()
+
     etag = None
     since = None
     if not force:
@@ -329,7 +333,7 @@ def _sync_issues(client, conn, owner, repo, force):
     with db_lock:
         if first_etag:
             update_sync_metadata(
-                conn, user=owner, repository=repo, endpoint=endpoint_name, etag=first_etag
+                conn, user=owner, repository=repo, endpoint=endpoint_name, etag=first_etag, timestamp=start_time
             )
         if all_issues:
             upsert_issues(conn, all_issues, repository_id)
@@ -345,6 +349,9 @@ def _sync_labels(client, conn, owner, repo, force):
     if not repository_id:
         logger.warning(f"Repository {repo_full_name} not found. Skipping labels.")
         return
+
+    # Capture start time
+    start_time = datetime.now(timezone.utc).isoformat()
 
     etag = None
     if not force:
@@ -386,7 +393,7 @@ def _sync_labels(client, conn, owner, repo, force):
     with db_lock:
         if first_etag:
             update_sync_metadata(
-                conn, user=owner, repository=repo, endpoint=endpoint_name, etag=first_etag
+                conn, user=owner, repository=repo, endpoint=endpoint_name, etag=first_etag, timestamp=start_time
             )
         if all_labels:
             upsert_labels(conn, all_labels, repository_id)
