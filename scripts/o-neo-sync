@@ -39,6 +39,17 @@ def cli(devel, vm):
                 os.remove(tar_path)
             except OSError:
                 pass
+        copy_to_vm("infra/tools/font_fetcher/o-font-fetcher", vm)
+        run_remote_command(vm, "mkdir -p neo/scripts/font_fetcher; mv o-font-fetcher neo/scripts/font_fetcher")
+
+        copy_to_vm("infra/tools/ghsync", vm)
+        run_remote_command(vm, "mkdir -p neo/scripts/ghsync; mv ghsync neo/scripts/")
+
+        copy_to_vm("~/.authinfo.gpg", vm)
+        copy_to_vm("~/.gnupg", vm)
+        
+        run_remote_command(vm, "./neo/setup.sh")
+                           
     else:
         perform_prod_sync()
 
@@ -104,6 +115,7 @@ def copy_to_vm(file_path, vm_name):
 
     user = os.environ.get("USER")
     key_path = os.path.expanduser("~/.ssh/id_rsa")
+    expanded_path = os.path.expanduser(file_path)
     
     # Destination in user's home directory via localhost
     dest = f"{user}@127.0.0.1:~/"
@@ -113,10 +125,15 @@ def copy_to_vm(file_path, vm_name):
         "-P", str(ssh_port),
         "-i", key_path,
         "-o", "StrictHostKeyChecking=no",
-        "-o", "UserKnownHostsFile=/dev/null",
-        file_path,
-        dest
+        "-o", "UserKnownHostsFile=/dev/null"
     ]
+
+    # Recursive check: if it's a directory, add the -r flag
+    if os.path.isdir(expanded_path):
+        click.echo(f"'{expanded_path}' is a directory. Enabling recursive copy (-r).")
+        cmd.append("-r")
+
+    cmd.extend([expanded_path, dest])    
     
     click.echo(f"Copying to {dest} on port {ssh_port}...")
     try:

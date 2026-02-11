@@ -18,3 +18,6 @@ assets/hacker.png
 
 # Used by the Neo Config wizard
 .neo-wizard/
+
+# The python virtual environment used by scripts used by Emacs
+.python
