@@ -1,6 +1,15 @@
 #!/bin/bash
 # Ehi, Emacs, this is *-* shell-script -*-
 
+# ==============================================================================
+#  NEO SETUP
+#  
+#  DISCLAIMER: Running untrusted code from the intertubes is the digital 
+#  equivalent of eating a mysterious floor-fry. But we promise—pinky swear—
+#  that this script is strictly for setting up your ~/neo directory and 
+#  Emacs environment. No magic, no malfeasance, just code.
+# ==============================================================================
+
 cd $HOME
 
 TARGET_DIR="neo"
