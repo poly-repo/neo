@@ -2,61 +2,6 @@
 
 (require 'cl-lib)
 
-;; (cl-defun neo/execute (command &key args on-success on-error buffer-name (show-buffer t))
-;;   "Execute COMMAND with ARGS asynchronously.
-;; If SHOW-BUFFER is nil, stay quiet unless an error occurs."
-;;   (let ((buf (get-buffer-create (or buffer-name "*NEO Subprocess*")))
-;;         (full-command (append (list command) args)))
-;;     (with-current-buffer buf 
-;;       (let ((inhibit-read-only t))
-;;         (erase-buffer)
-;;         (insert (format "NEO Executing: %s\n\n" (mapconcat #'identity full-command " ")))
-;;         ;; Only display if the user wants it or if we are debugging
-;;         (when show-buffer (display-buffer buf))))
-;;     (make-process
-;;      :name "neo-subtask"
-;;      :buffer buf
-;;      :command full-command
-;;      :sentinel (lambda (proc _event)
-;;                  (when (eq (process-status proc) 'exit)
-;;                    (let ((status (process-exit-status proc))
-;;                          (p-buf (process-buffer proc)))
-;;                      (if (zerop status)
-;;                          (progn
-;;                            (when on-success (funcall on-success)))
-;; 		       ;; On Error: Always show the buffer regardless of show-buffer setting
-;; 		       (when p-buf (pop-to-buffer p-buf))
-;; 		       (when on-error (funcall on-error)))))))))
-
-;; (cl-defun neo/execute (command &key args env on-success on-error buffer-name (show-buffer t))
-;;   "Execute COMMAND with ARGS asynchronously with optional ENV alist.
-;; ENV should be an alist of (VAR . VALUE) strings."
-;;   (let ((buf (get-buffer-create (or buffer-name "*NEO Subprocess*")))
-;;         (full-command (append (list (expand-file-name command)) args))
-;;         ;; Merge custom env into the existing Emacs environment
-;;         (process-environment (append 
-;;                               (mapcar (lambda (x) (format "%s=%s" (car x) (cdr x))) env)
-;;                               process-environment)))
-;;     (with-current-buffer buf 
-;;       (let ((inhibit-read-only t))
-;;         (erase-buffer)
-;;         (insert (format "NEO Executing: %s\n" (mapconcat #'identity full-command " ")))
-;;         (when env
-;;           (insert (format "With ENV: %s\n" env)))
-;;         (insert "\n")
-;;         (when show-buffer (display-buffer buf))))
-;;     (make-process
-;;      :name "neo-subtask"
-;;      :buffer buf
-;;      :command full-command
-;;      :sentinel (lambda (proc _event)
-;;                  (when (eq (process-status proc) 'exit)
-;;                    (let ((status (process-exit-status proc))
-;;                          (p-buf (process-buffer proc)))
-;;                      (if (zerop status)
-;;                          (when on-success (funcall on-success))
-;;                        (when p-buf (pop-to-buffer p-buf))
-;;                        (when on-error (funcall on-error)))))))))
 
 
 (cl-defun neo/execute (command &key args env on-success on-error buffer-name (show-buffer t) sync)
@@ -85,6 +30,7 @@ If SYNC is non-nil, wait for the process to finish before returning."
                                      (when on-success (funcall on-success))
                                    (when p-buf (display-buffer p-buf))
                                    (when on-error (funcall on-error)))))))))
+      (set-process-query-on-exit-flag proc nil)
       
       ;; If SYNC is requested, wait right here.
       (when sync
@@ -117,4 +63,29 @@ VENV-PATH defaults to .python inside `user-emacs-directory`."
                  :on-error on-error 
                  :buffer-name buffer-name 
                  :show-buffer show-buffer)))
+
+
+(defvar neo--disposable-processes '()
+  "List of rx-style patterns for disposable process buffers.")
+
+(defun neo/register-disposable-process (rx-form)
+  "Add an rx-style RX-FORM to the disposable process list."
+  (cl-pushnew rx-form neo--disposable-processes :test #'equal))
+
+(defun neo--advise-silence-disposable-process (proc)
+  "Check if PROC should be silenced based on NEO registry."
+  (let ((buf (process-buffer proc)))
+    (when (and buf 
+               (cl-some (lambda (pattern) 
+                          (string-match-p (eval pattern) (buffer-name buf)))
+                        neo--disposable-processes))
+      (message "ANNOTATING PROCESS %S" proc)
+      (set-process-query-on-exit-flag proc nil)
+      (with-current-buffer buf
+        (setq-local buffer-save-without-query t)
+        )))
+  proc)
+
+(advice-add 'make-process :filter-return #'neo--advise-silence-disposable-process)
+
 (provide 'neo-processes)

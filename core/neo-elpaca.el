@@ -81,4 +81,9 @@
 ;; Block until current queue processed.
 (elpaca-wait)
 
+(require 'neo-application)
+(neo/application "Elpaca Manager"
+  :setup (elpaca-manager)
+  :bind "e")
+
 (provide 'neo-elpaca)

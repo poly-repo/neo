@@ -1,1 +1,5 @@
+basedpyright
+rassumfrassum
 requests
+ruff
+ty

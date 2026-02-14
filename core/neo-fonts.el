@@ -4,6 +4,11 @@
 
 ;; TODO Discover all fonts needed by all installed extensions
 (defvar neo/fonts '(
+		    "Train One:google"
+		    "Poiret One:google"
+		    "Tourney:google"
+		    "Sirivennela:google"
+		    "Alan Sans:google"
 		    "Roboto:google"
 		    "Orbitron:google"
 		    "ZedMono:nerd"
