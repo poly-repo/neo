@@ -666,29 +666,62 @@ If the config file does not exist, it displays a welcome message."
 	(message "Launch Welcome")	;welcome should be able to handle existing files as well
       (load filename))))
 
-(defvar neo/extensions-lock-file
-  (expand-file-name "neo_extensions.lock" "/tmp/")
+(defvar neo/extensions-lock-file (neo/cache-file-path "extensions.lock")
   "Temporary lock file to indicate extensions are being fetched/loaded.")
 
-(defun neo/maybe-fetch-extensions ()
-  "Fetch extensions only if the lock file doesn't exist.
-If fetching occurs, creates the lock file during the operation and
-removes it afterward."
-  (interactive)
-  (if (file-exists-p neo/extensions-lock-file)
-      (message "[neo] Extensions lock file exists, skipping fetch")
-    (progn
-      ;; Create lock file
-      (write-region "" nil neo/extensions-lock-file)
-      (unwind-protect
-          ;; Call the real fetch function for each registry
-          (mapc (lambda (entry)
-                  (neo/fetch-extensions (cdr entry)))
-                neo/extension-registry-alist)
-        ;; Ensure the lock is removed afterward
-        (when (file-exists-p neo/extensions-lock-file)
-          (delete-file neo/extensions-lock-file))))))
+;; (defun neo/maybe-fetch-extensions ()
+;;   "Fetch extensions only if the lock file doesn't exist.
+;; If fetching occurs, creates the lock file during the operation and
+;; removes it afterward."
+;;   (interactive)
+;;   (if (file-exists-p neo/extensions-lock-file)
+;;       (message "[neo] Extensions lock file exists, skipping fetch")
+;;     (progn
+;;       ;; Create lock file
+;;       (write-region "" nil neo/extensions-lock-file)
+;;       (unwind-protect
+;;           ;; Call the real fetch function for each registry
+;;           (mapc (lambda (entry)
+;;                   (neo/fetch-extensions (cdr entry)))
+;;                 neo/extension-registry-alist)
+;;         ;; Ensure the lock is removed afterward
+;;         (when (file-exists-p neo/extensions-lock-file)
+;;           (delete-file neo/extensions-lock-file))))))
 
+(defun neo/maybe-fetch-extensions ()
+  "Fetch extensions robustly, handling stale locks from crashes."
+  (interactive)
+  ;; when running a development Emacs, extensions are already available
+  ;; TODO: this only for our distributions, but for now that's all there is.
+  (unless (string= (neo/get-emacs-instance-name) "neo-devel")
+    (let ((lock-pid (when (file-exists-p neo/extensions-lock-file)
+                      (with-temp-buffer
+			(insert-file-contents neo/extensions-lock-file)
+			(string-to-number (buffer-string))))))
+      
+      ;; Check if lock exists AND the process that owns it is still alive
+      (if (and lock-pid 
+               (process-attributes lock-pid) ;; Returns nil if PID is dead
+               (not (equal lock-pid (emacs-pid)))) ;; Ignore if it's somehow us
+          (message "[neo] Locked by active process %d, skipping." lock-pid)
+	
+	;; Otherwise, take the lock (overwriting stale locks)
+	(unwind-protect
+            (progn
+              ;; Write OUR Pid to the lock file
+              (write-region (number-to-string (emacs-pid)) nil neo/extensions-lock-file)
+              
+              ;; Do the work
+              (mapc (lambda (entry)
+                      (neo/fetch-extensions (cdr entry)))
+                    neo/extension-registry-alist))
+          
+          ;; Cleanup: Only delete if WE are the ones holding it
+          (when (equal (with-temp-buffer 
+			 (ignore-errors (insert-file-contents neo/extensions-lock-file))
+			 (string-to-number (buffer-string)))
+                       (emacs-pid))
+            (delete-file neo/extensions-lock-file)))))))
 
 ;;; New implementation
 

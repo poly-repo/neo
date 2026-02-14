@@ -7,6 +7,8 @@
 (defvar neo/use-extensions  t
   "When t we use neo extension mechanism. nil make immediate use of use-package")
 
+(defvar neo--mode (getenv "NEO_MODE"))
+
 (defun neo--require (feature)
   "A wrapper around `require` for FEATURE."
   (require feature))
@@ -15,10 +17,10 @@
 (neo--require 'neo-window)
 (neo--require 'neo-custom)			; customization groups
 (neo--require 'neo-config)			; configuration db
+(neo--require 'neo-application)			; needed in neo-packages
 (neo--require 'neo-packages)			; package management
 (neo--require 'neo-logging)
 (neo--require 'neo-framework)			; neo infra and core extension management
-(neo--require 'neo-application)
 (neo--require 'neo-processes)
 (neo--require 'neo-fonts)
 
