@@ -55,5 +55,14 @@ and return a quit function that restores the original perspective."
       (add-to-list 'load-path dir)
       (message "Added %s to load-path" dir))))
 
+(defun neo/select-or-create-frame (name)
+  (let ((frame
+         (seq-find
+          (lambda (f)
+            (equal (frame-parameter f 'name) name))
+          (frame-list))))
+    (if frame
+        (select-frame-set-input-focus frame)
+      (make-frame `((name . ,name))))))
 
 (provide 'neo-utils)
