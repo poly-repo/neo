@@ -15,13 +15,14 @@ Reads from /proc/self/cmdline if needed (Linux-only)."
             (or
              ;; Try $EMACS_NAME for compatibility or scripting
              (getenv "EMACS_NAME")
-             ;; Try /proc/self/cmdline
+             ;; Try /proc/self/cmdline for both -name (single-dash X flag) and --name
              (when (and (eq system-type 'gnu/linux)
                         (file-readable-p "/proc/self/cmdline"))
                (with-temp-buffer
                  (insert-file-contents-literally "/proc/self/cmdline")
                  (let* ((args (split-string (buffer-string) "\0" t))
-                        (index (cl-position "--name" args :test #'string=)))
+                        (index (or (cl-position "--name" args :test #'string=)
+                                   (cl-position "-name" args :test #'string=))))
                    (when index
                      (nth (1+ index) args)))))
              ;; Fallback
