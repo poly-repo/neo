@@ -11,12 +11,15 @@
     ;; TODO the one second delay here cannot be right or good. But for now I have nothing better
     (run-at-time 1 nil
 		 (lambda ()
-		   (if-let ((incomplete (cl-find 'incomplete elpaca--queues :key #'elpaca-q<-status))
-			    ((elpaca-q<-elpacas incomplete)))
-		       nil
-		     (when-let ((log (bound-and-true-p elpaca-log-buffer))
-				(window (get-buffer-window log t))) ;; log buffer visible
-		       (with-selected-window window (quit-window 'kill window)))))))
+		   (let ((incomplete
+			  (cl-loop for q in elpaca--queues
+				   unless (cl-loop for (_ . e) in (elpaca-q<-elpacas q)
+						   always (memq (elpaca--status e) '(finished failed)))
+				   when (elpaca-q<-elpacas q) return q)))
+		     (unless incomplete
+		       (when-let ((log (bound-and-true-p elpaca-log-buffer))
+				  (window (get-buffer-window log t)))
+			 (with-selected-window window (quit-window 'kill window))))))))
 
 (add-hook 'elpaca-after-init-hook #'neo/elpaca-hide-successful-log)
 (add-hook 'elpaca-post-queue-hook #'neo/elpaca-hide-successful-log)
@@ -76,6 +79,8 @@
  ;; Assume :elpaca t unless otherwise specified.
  (setq elpaca-use-package-by-default t))
 
+; compat is on GNU ELPA only; install via git to avoid needing the GNU ELPA cache
+(elpaca (compat :host github :repo "emacs-compat/compat"))
 (elpaca dash)				; used in neo-list-utils
 
 ;; Block until current queue processed.
