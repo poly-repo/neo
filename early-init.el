@@ -51,6 +51,8 @@ This variable is used by `neo/paraphenalia` to determine visibility of UI compon
   (defvar no-littering-etc-directory neo/config-directory)
   (defvar no-littering-var-directory neo/cache-directory)
 
+(neo/disable-customize-persistence)
+
 (startup-redirect-eln-cache
  (expand-file-name
   (format "eln-cache/%s-emacs-%d.%d/"
@@ -109,4 +111,3 @@ This variable is used by `neo/paraphenalia` to determine visibility of UI compon
 
 
     
-

@@ -28,6 +28,23 @@ Reads from /proc/self/cmdline if needed (Linux-only)."
              ;; Fallback
              "neo"))))
 
+(defconst neo--customize-disabled-message
+  "Neo disables Customize persistence; edit configuration in code instead.")
+
+(defun neo--custom-save-all-disabled (&rest _args)
+  "Prevent Customize from writing persistent state in Neo."
+  (if (called-interactively-p 'interactive)
+      (user-error "%s" neo--customize-disabled-message)
+    (message "%s" neo--customize-disabled-message)
+    nil))
+
+(defun neo/disable-customize-persistence ()
+  "Disable Customize persistence for Neo."
+  (setq custom-file null-device)
+  (with-eval-after-load 'cus-edit
+    (unless (advice-member-p #'neo--custom-save-all-disabled 'custom-save-all)
+      (advice-add 'custom-save-all :override #'neo--custom-save-all-disabled))))
+
 (defun neo/load-file (absolute-path &optional failure-ok)
   "Load the file at ABSOLUTE-PATH.
 
