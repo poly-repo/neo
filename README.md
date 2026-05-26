@@ -25,3 +25,15 @@ emacs --init-directory ~/neo
 
 You need Emacs 30.2 or newer. Why? I don't know, I'm not testing with anything older.
 
+## Customize
+
+Neo does not use Emacs Customize as a persistent configuration mechanism.
+
+1. Remove or rename `~/.emacs` before starting Neo with `--init-directory`. A
+   stale `~/.emacs` can still become `user-init-file` and bypass `init.el` in
+   the Neo directory.
+2. Start Neo with `emacs --init-directory ~/neo`.
+3. Keep configuration in Neo source files or Neo-managed profile files instead
+   of saving from Customize.
+4. If you open a Customize buffer anyway, Neo discards persistence by pointing
+   `custom-file` at `null-device`.

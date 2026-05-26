@@ -72,8 +72,6 @@ If SLUG is provided, a `neo/extension-slug` object, only replays that entry."
   ;; in particular elpaca and eln-cache
   ;(setq no-littering-etc-directory (expand-file-name ".litter/config" user-emacs-directory))
   ;(setq no-littering-var-directory (expand-file-name ".litter/data" user-emacs-directory))
-  (setq custom-file
-        (expand-file-name "custom.el" no-littering-var-directory))
   :config
   (no-littering-theme-backups)
   (setq auto-save-file-name-transforms
