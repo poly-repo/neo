@@ -35,7 +35,8 @@ On success, return t.
 
 On failure (file missing, unreadable, or LOAD errors):
 - If FAILURE-OK is nil (default), signal an error.
-- If FAILURE-OK is non-nil, print a message and return nil.
+- If FAILURE-OK is non-nil, return nil. Missing optional files stay silent,
+  while actual LOAD errors are still reported.
 
 This wrapper gives consistent behavior for all load failures without
 distinguishing between missing and unreadable files."
@@ -43,23 +44,24 @@ distinguishing between missing and unreadable files."
                (file-name-absolute-p absolute-path))
     (error "neo/load-file: ABSOLUTE-PATH must be an absolute filename (got %S)"
            absolute-path))
-  (let ((success
-         (condition-case err
-             (and (file-readable-p absolute-path)
-                  ;; Normalize successful loads to t
-                  (load absolute-path nil 'nomessage)
-                  t)
-           (error
-            (message "neo: error loading %s: %s"
-                     absolute-path (error-message-string err))
-            nil))))
-    (unless success
-      (if (not failure-ok)
-          (error "neo: failed to load %s" absolute-path)))
-    (message "Loading %s...%s"
-             absolute-path
-             (if success "success" "failure (ignored)"))
-    success))
+  (let ((load-error nil)
+        (readable-p (file-readable-p absolute-path)))
+    (condition-case err
+        (when readable-p
+          (load absolute-path nil 'nomessage)
+          t)
+      (error
+       (setq load-error (error-message-string err))
+       nil))
+    (cond
+     (load-error
+      (if failure-ok
+          (message "neo: error loading %s: %s" absolute-path load-error)
+        (error "neo: error loading %s: %s" absolute-path load-error))
+      nil)
+     (readable-p t)
+     (failure-ok nil)
+     (t (error "neo: failed to load %s" absolute-path)))))
 
 (defun neo/config-file-path (filename)
   (let* ((current-profile (expand-file-name "current-profile"
