@@ -111,7 +111,8 @@ in 'publisher:name' format."
 
 (cl-defmethod neo/replay-installed-extensions-packages ((framework neo-framework))
   "Replay package configurations for all installed extensions in FRAMEWORK."
-  (let ((installed (neo-framework-installed-extensions framework)))
+  (let ((installed (neo-framework-installed-extensions framework))
+        (neo--replayed-package-installs (make-hash-table :test 'equal)))
     (maphash
      (lambda (_slug installation)
        (let ((slug (neo/installation-extension-slug installation)))

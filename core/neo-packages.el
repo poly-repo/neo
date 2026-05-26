@@ -33,6 +33,9 @@ But it was introduced because elpaca had a problem with it:
 (defvar neo--enabled-packages nil
   "Alist mapping (USER . EXTENSION) to a list of unexpanded `neo/use-package` forms.")
 
+(defvar neo--replayed-package-installs nil
+  "Hash table tracking packages already replayed during startup.")
+
 (setq package-install-upgrade-built-in t)
 
 (setopt package-archives
@@ -55,7 +58,9 @@ If SLUG is provided, a `neo/extension-slug` object, only replays that entry."
                   (and (equal user (car key))
                        (equal extension (cdr key))))
           (dolist (form forms)
-            (eval form)))))))
+            (eval (neo--prepare-use-package-form
+                   form
+                   neo--replayed-package-installs))))))))
 
 ;;; TODO: figure out where duplicate packages get queued
 ;;; till then is very annoying to see things like:

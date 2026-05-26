@@ -49,6 +49,7 @@
 					;(require 'neo-early-init-utils)
 (defun neo--startup ()
   (require 'neo)
+  (elpaca-process-queues)
   (elpaca-wait)
   (condition-case err
       (simple-modeline-mode 1)
