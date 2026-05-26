@@ -98,6 +98,31 @@ ALIST should be a variable holding an association list of the form ((key . list)
       (push (cons key (list value)) alist)))            ; create new key with singleton list
   alist)
 
+(defun neo--prepare-use-package-form (form seen-packages)
+  "Return FORM with duplicate installs disabled using SEEN-PACKAGES.
+
+When FORM is a duplicate `use-package' declaration for a package already
+present in SEEN-PACKAGES, force `:ensure nil' so the later declaration still
+applies configuration without re-queueing the install."
+  (if (and (listp form) (eq (car form) 'use-package))
+      (let* ((name (cadr form))
+             (args (cddr form))
+             (duplicate (and seen-packages
+                             (not (string= name "emacs"))
+                             (gethash name seen-packages))))
+        (when (and seen-packages
+                   (not (string= name "emacs")))
+          (puthash name t seen-packages))
+        (if duplicate
+            (let* ((args-alist (neo--sectioned-list->alist args))
+                   (args-alist (if (assoc :ensure args-alist)
+                                   (neo--alist-replace-key :ensure :ensure nil args-alist)
+                                 (neo--alist-append args-alist :ensure nil)))
+                   (args (neo--alist->sectioned-list args-alist)))
+              `(use-package ,name ,@args))
+          form))
+    form))
+
 (defmacro neo/use-package (name &rest args)
   "Augment `use-package` with Neo-specific tracking and filtering.
 
@@ -105,9 +130,12 @@ If the global variable neo/use-extensions is t, the use-package is
 immediately executed, otherwise the raw `use-package` form is stored in
 `neo--enabled-packages` indexed by (user . extension-base-name)."
   (declare (indent defun))
-  (let* ((ensure (if (string= name "emacs") (list :ensure nil) '()))
-					;         (args (append (neo/filter-package-args args) ensure))
-         (args (append (neo--normalize-use-package-arguments args) ensure))
+  (let* ((args (neo--normalize-use-package-arguments args))
+         (args (if (memq :ensure args)
+                   args
+                 (append args (if (string= name "emacs")
+                                  '(:ensure nil)
+                                '(:ensure (:wait t))))))
          (file (or load-file-name buffer-file-name "unknown"))
          (user (neo--publisher-name))
          (extension (file-name-nondirectory

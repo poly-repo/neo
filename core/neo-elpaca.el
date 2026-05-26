@@ -24,6 +24,17 @@
 (add-hook 'elpaca-after-init-hook #'neo/elpaca-hide-successful-log)
 (add-hook 'elpaca-post-queue-hook #'neo/elpaca-hide-successful-log)
 
+(defun neo--elpaca-enqueue-deduplicate (orig order &optional queue)
+  "Return an existing Elpaca entry when ORDER is already queued."
+  (let ((id (condition-case nil
+                (elpaca--first order)
+              (error nil))))
+    (if (and id
+             (not after-init-time)
+             (elpaca-get id))
+        (elpaca-get id)
+      (funcall orig order queue))))
+
 
 ;; TODO lock files are still in flux, but if you never want to update they work.
 ; (defvar elpaca-lock-file "~/elpacas.el")
@@ -31,15 +42,15 @@
 ;; (add-hook 'elpaca-post-queue-hook #'+elpaca-hide-successful-log)
 
 ;;; The following is the installer copied from the elpaca github
-(defvar elpaca-installer-version 0.11)
+(defvar elpaca-installer-version 0.12)
 (defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
-(defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
+(defvar elpaca-sources-directory (expand-file-name "sources/" elpaca-directory))
 (defvar elpaca-order '(elpaca :repo "https://github.com/progfolio/elpaca.git"
                               :ref nil :depth 1 :inherit ignore
                               :files (:defaults "elpaca-test.el" (:exclude "extensions"))
-                              :build (:not elpaca--activate-package)))
-(let* ((repo  (expand-file-name "elpaca/" elpaca-repos-directory))
+                              :build (:not elpaca-activate)))
+(let* ((repo  (expand-file-name "elpaca/" elpaca-sources-directory))
        (build (expand-file-name "elpaca/" elpaca-builds-directory))
        (order (cdr elpaca-order))
        (default-directory repo))
@@ -67,17 +78,18 @@
     (require 'elpaca)
     (elpaca-generate-autoloads "elpaca" repo)
     (let ((load-source-file-function nil)) (load "./elpaca-autoloads"))))
-(add-hook 'after-init-hook #'elpaca-process-queues)
+(advice-add 'elpaca--enqueue :around #'neo--elpaca-enqueue-deduplicate)
+(add-hook 'after-init-hook #'elpaca-process-queues -90)
 (elpaca `(,@elpaca-order))
 
 (setopt elpaca-ui-row-limit most-positive-fixnum)
 
 (elpaca
  elpaca-use-package
- ;; Enable :elpaca use-package keyword.
+ ;; Enable :ensure support backed by Elpaca recipes.
  (elpaca-use-package-mode)
- ;; Assume :elpaca t unless otherwise specified.
- (setq elpaca-use-package-by-default t))
+ ;; Neo expects package declarations to install unless explicitly disabled.
+ (setq use-package-always-ensure '(:wait t)))
 
 ; compat is on GNU ELPA only; install via git to avoid needing the GNU ELPA cache
 (elpaca (compat :host github :repo "emacs-compat/compat"))
