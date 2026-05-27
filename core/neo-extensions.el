@@ -519,6 +519,11 @@ on :on-cycle (see above)."
     (normal-top-level-add-subdirs-to-load-path)
     (delete-dups load-path)))
 
+(defun neo/register-extension-load-path (file-dir)
+  "Add FILE-DIR and its subdirectories to the global `load-path'."
+  (dolist (dir (reverse (neo--extension-load-path file-dir)))
+    (add-to-list 'load-path dir)))
+
 ;; TODO here we cheat and relay on the fact that for testing we have
 ;; the user-emacs-directory pointing into the repo. But this means we
 ;; have two levels of 'extensions'
@@ -536,7 +541,8 @@ Returns non-nil on successful load, nil if file does not exist."
          (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
     (if (not (file-exists-p file))
 	nil
-      (let ((load-path (append (neo--extension-load-path file-dir) load-path)))
+      (progn
+        (neo/register-extension-load-path file-dir)
         (load file nil 'nomessage 'nosuffix)
 					;        (neo/log-info "[neo] Loaded %s" file)
         t))))
