@@ -512,6 +512,13 @@ on :on-cycle (see above)."
   (let ((current (if (string= (neo/get-emacs-instance-name) "neo-devel") "/" "/current/")))
     (expand-file-name (format "%s%s%s" publisher current extension-name) base)))
 
+(defun neo--extension-load-path (file-dir)
+  "Return load-path entries for an extension rooted at FILE-DIR."
+  (let ((default-directory file-dir)
+        (load-path (list file-dir)))
+    (normal-top-level-add-subdirs-to-load-path)
+    (delete-dups load-path)))
+
 ;; TODO here we cheat and relay on the fact that for testing we have
 ;; the user-emacs-directory pointing into the repo. But this means we
 ;; have two levels of 'extensions'
@@ -529,7 +536,7 @@ Returns non-nil on successful load, nil if file does not exist."
          (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
     (if (not (file-exists-p file))
 	nil
-      (let ((load-path (cons file-dir load-path)))
+      (let ((load-path (append (neo--extension-load-path file-dir) load-path)))
         (load file nil 'nomessage 'nosuffix)
 					;        (neo/log-info "[neo] Loaded %s" file)
         t))))
@@ -571,7 +578,7 @@ The original `neo/use-package' is restored afterwards."
          (file-dir  (expand-file-name (format "%s/%s" publisher name) base))
          (file      (expand-file-name (format "neo-%s.el" name) file-dir)))
     (when (file-exists-p file)
-      (let ((load-path (cons file-dir load-path))
+      (let ((load-path (append (neo--extension-load-path file-dir) load-path))
             (used-packages '()))
         ;; load the extension, collecting package-name . package-desc alist
         (neo/load-with-dummy-use-package
@@ -880,4 +887,3 @@ We assume that target-dir contains commit-sha"
       (neo/download-latest-registry-content registry))))
 
 (provide 'neo-extensions)
-
