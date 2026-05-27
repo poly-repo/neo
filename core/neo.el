@@ -24,6 +24,11 @@
 (neo--require 'neo-processes)
 (neo--require 'neo-fonts)
 
+(require 'server)
+
+(unless (server-running-p)
+  (server-start))
+
 (neo/set-emacs-source-directories)
 
 (setq load-prefer-newer t)
