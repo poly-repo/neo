@@ -16,6 +16,9 @@
 (defvar neo/after-framework-bootstrap-hook nil
   "Hook run after the Neo framework has finished bootstrapping.")
 
+(defvar neo/framework-bootstrapped-p nil
+  "Non-nil after Neo has replayed extension package declarations.")
+
 (defun neo--make-framework-from-cache (&optional instance)
   "Create a `neo-framework' populated from cache for INSTANCE.
 If no cache exists, create empty hash tables for the slots."
@@ -51,6 +54,7 @@ If no cache exists, create empty hash tables for the slots."
 
 (defun neo/bootstrap (framework)
   ;; TODO probably need to be moved to neo-framework and renamed maybe 'bootstrap'.
+  (setq neo/framework-bootstrapped-p nil)
   (let* ((config-val (neo/get-config "enabled-extensions"))
          (enabled-extensions (if config-val (read config-val) nil))
          (extensions (neo/topo-sort-from-roots (neo-framework-available-extensions framework)
@@ -118,6 +122,7 @@ in 'publisher:name' format."
        (let ((slug (neo/installation-extension-slug installation)))
          (neo/replay-extension-packages slug)))
      installed))
+  (setq neo/framework-bootstrapped-p t)
   (run-hooks 'neo/after-framework-bootstrap-hook))
 
 (cl-defgeneric neo/render-debug-info (framework)
