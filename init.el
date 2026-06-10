@@ -54,8 +54,6 @@
   (condition-case err
       (simple-modeline-mode 1)
     (file-missing (message "NEO: simple-modeline not available: %s" (error-message-string err))))
-  (when (fboundp 'persp-switch)
-    (persp-switch "*dashboard*"))
   (when (fboundp 'neo/dashboard)
     (neo/dashboard)))
   
