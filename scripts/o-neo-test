@@ -7,19 +7,25 @@ START_AFTER_SNAPSHOT=""
 VM_NAME=""
 O_VM_BIN=""
 DEFAULT_DEBIAN_VERSION="debian-12"
+CREATED_SNAPSHOT_NAME="created"
 DEFAULT_SNAPSHOT_DESCRIPTION="Default install of debian-${DEFAULT_DEBIAN_VERSION#debian-}"
 DEFAULT_SNAPSHOT_NAME="debian"
+DEVENV_SNAPSHOT_NAME="devenv"
+DEVENV_SNAPSHOT_DESCRIPTION="Development environment installed"
 
 SNAPSHOT_NAMES=(
     "${DEFAULT_SNAPSHOT_NAME}"
+    "${DEVENV_SNAPSHOT_NAME}"
 )
 
 SNAPSHOT_DESCRIPTIONS=(
     "${DEFAULT_SNAPSHOT_DESCRIPTION}"
+    "${DEVENV_SNAPSHOT_DESCRIPTION}"
 )
 
 SNAPSHOT_ACTIONS=(
     "stage_default_debian"
+    "stage_devenv"
 )
 
 usage() {
@@ -67,6 +73,15 @@ vm_exists() {
 snapshot_exists() {
     local snapshot_name="$1"
     virsh snapshot-info "${VM_NAME}" "${snapshot_name}" >/dev/null 2>&1
+}
+
+run_vm_command() {
+    if (( $# == 0 )); then
+        printf 'Error: run_vm_command requires a remote command.\n' >&2
+        return 2
+    fi
+
+    "${O_VM_BIN}" ssh "${VM_NAME}" "$@"
 }
 
 require_existing_vm() {
@@ -187,6 +202,23 @@ snapshot() {
     "${O_VM_BIN}" snapshot create "${VM_NAME}" "${snapshot_name}" --description "${snapshot_description}"
 }
 
+revert_to_snapshot() {
+    local snapshot_name="$1"
+
+    require_existing_vm
+
+    if ! snapshot_exists "${snapshot_name}"; then
+        printf 'Error: snapshot %s does not exist for VM %s.\n' "${snapshot_name}" "${VM_NAME}" >&2
+        return 1
+    fi
+
+    printf 'Reverting VM %s to snapshot %s...\n' "${VM_NAME}" "${snapshot_name}"
+    virsh snapshot-revert --domain "${VM_NAME}" --snapshotname "${snapshot_name}"
+
+    # Ensure the reverted VM is booted and reachable before subsequent stages.
+    run_vm_command true
+}
+
 ensure_vm() {
     if vm_exists; then
         printf 'VM %s already exists; skipping creation.\n' "${VM_NAME}"
@@ -199,6 +231,12 @@ ensure_vm() {
 
 stage_default_debian() {
     ensure_vm
+    revert_to_snapshot "${CREATED_SNAPSHOT_NAME}"
+}
+
+stage_devenv() {
+    run_vm_command sudo apt-get update
+    run_vm_command sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y ansible git build-essential
 }
 
 run_snapshot_pipeline() {
@@ -244,11 +282,7 @@ main() {
 
     if [[ -n "${START_AFTER_SNAPSHOT}" ]]; then
         validate_start_snapshot "${START_AFTER_SNAPSHOT}"
-        require_existing_vm
-        if ! snapshot_exists "${START_AFTER_SNAPSHOT}"; then
-            printf 'Error: snapshot %s does not exist for VM %s.\n' "${START_AFTER_SNAPSHOT}" "${VM_NAME}" >&2
-            return 1
-        fi
+        revert_to_snapshot "${START_AFTER_SNAPSHOT}"
     fi
 
     run_snapshot_pipeline "${START_AFTER_SNAPSHOT}"
