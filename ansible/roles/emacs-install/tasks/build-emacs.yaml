@@ -154,9 +154,10 @@
     chdir: "{{emacs_source_dir}}"
   when: not install_dir.stat.exists and source == 'git'
 
-- name: Get the current Git commit hash in a directory
+- name: Get the current Emacs source Git commit hash
   command: git -C "{{emacs_source_dir}}" rev-parse HEAD
   register: git_commit_hash
+  changed_when: false
   when: not install_dir.stat.exists and source == 'git'
 
 - name: Get the current Git commit hash in a directory
@@ -169,9 +170,10 @@
     msg: "Current Git commit hash is {{ git_commit_hash.stdout }}"
   when: not install_dir.stat.exists and source == 'git'
 
-- name: Get the date of the latest Git commit in the current directory
-  command: git log -1 --format=%cd
+- name: Get the date of the current Emacs source commit
+  command: git -C "{{ emacs_source_dir }}" log -1 --date=short --format=%cd
   register: git_commit_date
+  changed_when: false
   when: not install_dir.stat.exists and source == 'git'
 
 - name: Display the date of the latest Git commit
