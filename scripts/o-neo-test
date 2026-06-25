@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+REQUESTED_VM_NAME="emacs"
+START_AFTER_SNAPSHOT=""
+VM_NAME=""
+O_VM_BIN=""
+DEFAULT_DEBIAN_VERSION="debian-12"
+DEFAULT_SNAPSHOT_DESCRIPTION="Default install of debian-${DEFAULT_DEBIAN_VERSION#debian-}"
+DEFAULT_SNAPSHOT_NAME="debian"
+
+SNAPSHOT_NAMES=(
+    "${DEFAULT_SNAPSHOT_NAME}"
+)
+
+SNAPSHOT_DESCRIPTIONS=(
+    "${DEFAULT_SNAPSHOT_DESCRIPTION}"
+)
+
+SNAPSHOT_ACTIONS=(
+    "stage_default_debian"
+)
+
+usage() {
+    printf 'Usage: %s [--start SNAPSHOT] [vm-name]\n' "${0##*/}" >&2
+}
+
+init_vm_context() {
+    local vm_name="${1:-emacs}"
+    local script_dir
+    local workspace_root
+    local bundled_o_vm
+    local o_vm_bin
+
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+    workspace_root="$(cd -- "${script_dir}/../../../.." && pwd -P)"
+    bundled_o_vm="${workspace_root}/infra/tools/vm_manager/o-vm"
+
+    if o_vm_bin="$(command -v o-vm 2>/dev/null)"; then
+        :
+    elif [[ -x "${bundled_o_vm}" ]]; then
+        o_vm_bin="${bundled_o_vm}"
+    else
+        printf 'Error: could not find o-vm on PATH or at %s\n' "${bundled_o_vm}" >&2
+        return 1
+    fi
+
+    if ! command -v virsh >/dev/null 2>&1; then
+        printf 'Error: virsh is required to manage VM %s.\n' "${vm_name}" >&2
+        return 1
+    fi
+
+    if ! virsh list --all >/dev/null 2>&1; then
+        printf 'Error: unable to query libvirt with virsh. Check that libvirt is running and accessible.\n' >&2
+        return 1
+    fi
+
+    VM_NAME="${vm_name}"
+    O_VM_BIN="${o_vm_bin}"
+}
+
+vm_exists() {
+    virsh dominfo "${VM_NAME}" >/dev/null 2>&1
+}
+
+snapshot_exists() {
+    local snapshot_name="$1"
+    virsh snapshot-info "${VM_NAME}" "${snapshot_name}" >/dev/null 2>&1
+}
+
+require_existing_vm() {
+    if ! vm_exists; then
+        printf 'Error: VM %s does not exist.\n' "${VM_NAME}" >&2
+        return 1
+    fi
+}
+
+validate_pipeline() {
+    local stage_count="${#SNAPSHOT_NAMES[@]}"
+    local i
+
+    if (( stage_count == 0 )); then
+        printf 'Error: no snapshot stages are configured.\n' >&2
+        return 1
+    fi
+
+    if (( stage_count != ${#SNAPSHOT_DESCRIPTIONS[@]} || stage_count != ${#SNAPSHOT_ACTIONS[@]} )); then
+        printf 'Error: snapshot stage configuration is inconsistent.\n' >&2
+        return 1
+    fi
+
+    for i in "${!SNAPSHOT_ACTIONS[@]}"; do
+        if ! declare -F "${SNAPSHOT_ACTIONS[$i]}" >/dev/null 2>&1; then
+            printf 'Error: snapshot action %s is not defined.\n' "${SNAPSHOT_ACTIONS[$i]}" >&2
+            return 1
+        fi
+    done
+}
+
+validate_start_snapshot() {
+    local start_snapshot="$1"
+    local configured_snapshot
+
+    for configured_snapshot in "${SNAPSHOT_NAMES[@]}"; do
+        if [[ "${configured_snapshot}" == "${start_snapshot}" ]]; then
+            return 0
+        fi
+    done
+
+    printf 'Error: unknown snapshot %s.\n' "${start_snapshot}" >&2
+    printf 'Configured snapshots: %s\n' "${SNAPSHOT_NAMES[*]}" >&2
+    return 1
+}
+
+parse_args() {
+    local saw_vm_name=0
+
+    while (( $# > 0 )); do
+        case "$1" in
+            --start)
+                if (( $# < 2 )); then
+                    printf 'Error: --start requires a snapshot name.\n' >&2
+                    usage
+                    return 2
+                fi
+                START_AFTER_SNAPSHOT="$2"
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            --)
+                shift
+                while (( $# > 0 )); do
+                    if (( saw_vm_name )); then
+                        printf 'Error: too many positional arguments.\n' >&2
+                        usage
+                        return 2
+                    fi
+                    REQUESTED_VM_NAME="$1"
+                    saw_vm_name=1
+                    shift
+                done
+                return 0
+                ;;
+            -*)
+                printf 'Error: unknown option %s.\n' "$1" >&2
+                usage
+                return 2
+                ;;
+            *)
+                if (( saw_vm_name )); then
+                    printf 'Error: too many positional arguments.\n' >&2
+                    usage
+                    return 2
+                fi
+                REQUESTED_VM_NAME="$1"
+                saw_vm_name=1
+                shift
+                ;;
+        esac
+    done
+}
+
+snapshot() {
+    if (( $# != 2 )); then
+        printf 'Usage: snapshot <snapshot-name> <snapshot-description>\n' >&2
+        return 2
+    fi
+
+    local snapshot_name="$1"
+    local snapshot_description="$2"
+
+    if [[ -z "${VM_NAME}" || -z "${O_VM_BIN}" ]]; then
+        printf 'Error: snapshot helper requires VM_NAME and O_VM_BIN to be set.\n' >&2
+        return 1
+    fi
+
+    if virsh snapshot-info "${VM_NAME}" "${snapshot_name}" >/dev/null 2>&1; then
+        printf 'Snapshot %s already exists for VM %s; skipping creation.\n' "${snapshot_name}" "${VM_NAME}"
+        return 0
+    fi
+
+    printf 'Taking snapshot %s for VM %s...\n' "${snapshot_name}" "${VM_NAME}"
+    "${O_VM_BIN}" snapshot create "${VM_NAME}" "${snapshot_name}" --description "${snapshot_description}"
+}
+
+ensure_vm() {
+    if vm_exists; then
+        printf 'VM %s already exists; skipping creation.\n' "${VM_NAME}"
+        return 0
+    fi
+
+    printf 'Creating VM %s...\n' "${VM_NAME}"
+    "${O_VM_BIN}" create --debian-version "${DEFAULT_DEBIAN_VERSION}" --memory 16GiB --cpu-count 4 "${VM_NAME}"
+}
+
+stage_default_debian() {
+    ensure_vm
+}
+
+run_snapshot_pipeline() {
+    local start_after="${1:-}"
+    local should_run=1
+    local executed_stage=0
+    local i
+    local snapshot_name
+    local snapshot_description
+    local snapshot_action
+
+    if [[ -n "${start_after}" ]]; then
+        should_run=0
+    fi
+
+    for i in "${!SNAPSHOT_NAMES[@]}"; do
+        snapshot_name="${SNAPSHOT_NAMES[$i]}"
+        snapshot_description="${SNAPSHOT_DESCRIPTIONS[$i]}"
+        snapshot_action="${SNAPSHOT_ACTIONS[$i]}"
+
+        if (( ! should_run )); then
+            if [[ "${snapshot_name}" == "${start_after}" ]]; then
+                should_run=1
+            fi
+            continue
+        fi
+
+        printf 'Running stage %s...\n' "${snapshot_name}"
+        "${snapshot_action}"
+        snapshot "${snapshot_name}" "${snapshot_description}"
+        executed_stage=1
+    done
+
+    if (( ! executed_stage )) && [[ -n "${start_after}" ]]; then
+        printf 'No stages configured after snapshot %s; nothing to do.\n' "${start_after}"
+    fi
+}
+
+main() {
+    parse_args "$@"
+    validate_pipeline
+    init_vm_context "${REQUESTED_VM_NAME}"
+
+    if [[ -n "${START_AFTER_SNAPSHOT}" ]]; then
+        validate_start_snapshot "${START_AFTER_SNAPSHOT}"
+        require_existing_vm
+        if ! snapshot_exists "${START_AFTER_SNAPSHOT}"; then
+            printf 'Error: snapshot %s does not exist for VM %s.\n' "${START_AFTER_SNAPSHOT}" "${VM_NAME}" >&2
+            return 1
+        fi
+    fi
+
+    run_snapshot_pipeline "${START_AFTER_SNAPSHOT}"
+}
+
+main "$@"
