@@ -1,6 +1,8 @@
 #!/bin/bash
 # Ehi, Emacs, this is *-* shell-script -*-
 
+set -euo pipefail
+
 # ==============================================================================
 #  NEO SETUP
 #  
@@ -10,7 +12,7 @@
 #  Emacs environment. No magic, no malfeasance, just code.
 # ==============================================================================
 
-cd $HOME
+cd "$HOME"
 
 TARGET_DIR="neo"
 REPO_URL="https://github.com/poly-repo/neo.git"
@@ -24,8 +26,7 @@ elif [ -d "$TARGET_DIR/.git" ]; then
     echo "Directory $TARGET_DIR exists and is a git repo. Pulling updates..."
     git -C "$TARGET_DIR" pull
 else
-    echo "ERROR: Directory $TARGET_DIR exists but is NOT a git repository." >&2
-    exit 1
+    echo "Directory $TARGET_DIR exists but is not a git repository. Assuming it was synced locally and skipping git update."
 fi
 
 if [ ! -d "$VENV_PATH" ]; then
