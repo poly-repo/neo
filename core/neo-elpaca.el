@@ -8,19 +8,19 @@
 (defvar elpaca-directory (expand-file-name "elpaca/" no-littering-var-directory))
 
 (defun neo/elpaca-hide-successful-log ()
-    "Hide Elpaca log buffer if queues processed successfully."
-    ;; TODO the one second delay here cannot be right or good. But for now I have nothing better
-    (run-at-time 1 nil
-		 (lambda ()
-		   (let ((incomplete
-			  (cl-loop for q in elpaca--queues
-				   unless (cl-loop for (_ . e) in (elpaca-q<-elpacas q)
-						   always (memq (elpaca--status e) '(finished failed)))
-				   when (elpaca-q<-elpacas q) return q)))
-		     (unless incomplete
-		       (when-let ((log (bound-and-true-p elpaca-log-buffer))
-				  (window (get-buffer-window log t)))
-			 (with-selected-window window (quit-window 'kill window))))))))
+  "Hide Elpaca log buffer if queues processed successfully."
+  ;; TODO the one second delay here cannot be right or good. But for now I have nothing better
+  (run-at-time 1 nil
+	       (lambda ()
+		 (let ((incomplete
+			(cl-loop for q in elpaca--queues
+				 unless (cl-loop for (_ . e) in (elpaca-q<-elpacas q)
+						 always (memq (elpaca<-status e) '(finished failed)))
+				 when (elpaca-q<-elpacas q) return q)))
+		   (unless incomplete
+		     (when-let ((log (bound-and-true-p elpaca-log-buffer))
+				(window (get-buffer-window log t)))
+		       (with-selected-window window (quit-window 'kill window))))))))
 
 (add-hook 'elpaca-after-init-hook #'neo/elpaca-hide-successful-log)
 (add-hook 'elpaca-post-queue-hook #'neo/elpaca-hide-successful-log)
