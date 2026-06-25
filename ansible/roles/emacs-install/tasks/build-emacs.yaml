@@ -186,6 +186,7 @@
     state: file
     suffix: .tmp
   register: temp_file
+  when: not install_dir.stat.exists
 
 - name: Expand template to the temporary file
   template:
@@ -194,7 +195,7 @@
   vars:
     git_commit_date: "{{ git_commit_date.stdout }}"
     git_commit_hash: "{{ git_commit_hash.stdout }}"
-  when: not install_dir.stat.exists and source == 'git'
+  when: temp_file.path is defined and source == 'git'
 
 - name: Expand template to the temporary file
   template:
@@ -203,32 +204,41 @@
   vars:
     git_commit_date: "<release>"
     git_commit_hash: "<release>"
-  when: source != 'git'
+  when: temp_file.path is defined and source != 'git'
 
 - name: Display the path of the temporary file
   debug:
     msg: "Template expanded to temporary file at {{ temp_file.path }}"
+  when: temp_file.path is defined
 
 - name: Display the content of the temporary file
   command: cat "{{ temp_file.path }}"
   register: file_content
   changed_when: false
+  when: temp_file.path is defined
 
 - name: Show file content
   debug:
     var: file_content.stdout
+  when: file_content is defined
+
+- name: Apply generated NEO git info patch
+  ansible.posix.patch:
+    src: "{{ temp_file.path }}"
+    basedir: "{{ emacs_source_dir }}/src"
+  when: temp_file.path is defined
+
+- name: Apply custom Emacs source patch
+  ansible.posix.patch:
+    src: "{{patch}}"
+    basedir: "{{emacs_source_dir}}/src"
+  when: not install_dir.stat.exists and patch != ''
 
 - name: Delete the temporary file
   file:
     path: "{{ temp_file.path }}"
     state: absent
   when: temp_file.path is defined
-
-- name: patch
-  ansible.posix.patch:
-    src: "{{patch}}"
-    basedir: "{{emacs_source_dir}}/src"
-  when: not install_dir.stat.exists and patch != ''
 
 - name: Create build directory
   ansible.builtin.file:
