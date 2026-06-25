@@ -89,6 +89,29 @@ vm_exists() {
     virsh dominfo "${VM_NAME}" >/dev/null 2>&1
 }
 
+vm_state() {
+    virsh domstate "${VM_NAME}" 2>/dev/null | tr -d '\r'
+}
+
+vm_is_shut_off() {
+    [[ "$(vm_state)" == "shut off" ]]
+}
+
+wait_for_vm_shutdown() {
+    local timeout_seconds="${1:-120}"
+    local deadline=$((SECONDS + timeout_seconds))
+
+    while (( SECONDS < deadline )); do
+        if vm_is_shut_off; then
+            return 0
+        fi
+        sleep 2
+    done
+
+    printf 'Error: VM %s did not shut down within %s seconds.\n' "${VM_NAME}" "${timeout_seconds}" >&2
+    return 1
+}
+
 snapshot_exists() {
     local snapshot_name="$1"
     virsh snapshot-info "${VM_NAME}" "${snapshot_name}" >/dev/null 2>&1
@@ -109,6 +132,7 @@ sync_local_neo() {
         return 1
     fi
 
+    run_vm_command true
     "${O_NEO_SYNC_BIN}" --devel --vm "${VM_NAME}"
 }
 
@@ -224,6 +248,12 @@ snapshot() {
     if virsh snapshot-info "${VM_NAME}" "${snapshot_name}" >/dev/null 2>&1; then
         printf 'Snapshot %s already exists for VM %s; skipping creation.\n' "${snapshot_name}" "${VM_NAME}"
         return 0
+    fi
+
+    if ! vm_is_shut_off; then
+        printf 'Stopping VM %s before taking snapshot %s...\n' "${VM_NAME}" "${snapshot_name}"
+        "${O_VM_BIN}" stop "${VM_NAME}"
+        wait_for_vm_shutdown
     fi
 
     printf 'Taking snapshot %s for VM %s...\n' "${snapshot_name}" "${VM_NAME}"
