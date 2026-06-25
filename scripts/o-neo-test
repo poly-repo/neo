@@ -6,26 +6,32 @@ REQUESTED_VM_NAME="emacs"
 START_AFTER_SNAPSHOT=""
 VM_NAME=""
 O_VM_BIN=""
+O_NEO_SYNC_BIN=""
 DEFAULT_DEBIAN_VERSION="debian-12"
 CREATED_SNAPSHOT_NAME="created"
 DEFAULT_SNAPSHOT_DESCRIPTION="Default install of debian-${DEFAULT_DEBIAN_VERSION#debian-}"
 DEFAULT_SNAPSHOT_NAME="debian"
 DEVENV_SNAPSHOT_NAME="devenv"
 DEVENV_SNAPSHOT_DESCRIPTION="Development environment installed"
+NEO_SYNC_SNAPSHOT_NAME="neo-sync"
+NEO_SYNC_SNAPSHOT_DESCRIPTION="Current Neo synced into VM"
 
 SNAPSHOT_NAMES=(
     "${DEFAULT_SNAPSHOT_NAME}"
     "${DEVENV_SNAPSHOT_NAME}"
+    "${NEO_SYNC_SNAPSHOT_NAME}"
 )
 
 SNAPSHOT_DESCRIPTIONS=(
     "${DEFAULT_SNAPSHOT_DESCRIPTION}"
     "${DEVENV_SNAPSHOT_DESCRIPTION}"
+    "${NEO_SYNC_SNAPSHOT_DESCRIPTION}"
 )
 
 SNAPSHOT_ACTIONS=(
     "stage_default_debian"
     "stage_devenv"
+    "stage_neo_sync"
 )
 
 usage() {
@@ -38,10 +44,13 @@ init_vm_context() {
     local workspace_root
     local bundled_o_vm
     local o_vm_bin
+    local bundled_o_neo_sync
+    local o_neo_sync_bin
 
     script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
     workspace_root="$(cd -- "${script_dir}/../../../.." && pwd -P)"
     bundled_o_vm="${workspace_root}/infra/tools/vm_manager/o-vm"
+    bundled_o_neo_sync="${workspace_root}/devex/editors/emacs/scripts/o-neo-sync"
 
     if o_vm_bin="$(command -v o-vm 2>/dev/null)"; then
         :
@@ -49,6 +58,15 @@ init_vm_context() {
         o_vm_bin="${bundled_o_vm}"
     else
         printf 'Error: could not find o-vm on PATH or at %s\n' "${bundled_o_vm}" >&2
+        return 1
+    fi
+
+    if o_neo_sync_bin="$(command -v o-neo-sync 2>/dev/null)"; then
+        :
+    elif [[ -x "${bundled_o_neo_sync}" ]]; then
+        o_neo_sync_bin="${bundled_o_neo_sync}"
+    else
+        printf 'Error: could not find o-neo-sync on PATH or at %s\n' "${bundled_o_neo_sync}" >&2
         return 1
     fi
 
@@ -64,6 +82,7 @@ init_vm_context() {
 
     VM_NAME="${vm_name}"
     O_VM_BIN="${o_vm_bin}"
+    O_NEO_SYNC_BIN="${o_neo_sync_bin}"
 }
 
 vm_exists() {
@@ -82,6 +101,15 @@ run_vm_command() {
     fi
 
     "${O_VM_BIN}" ssh "${VM_NAME}" "$@"
+}
+
+sync_local_neo() {
+    if [[ -z "${O_NEO_SYNC_BIN}" ]]; then
+        printf 'Error: sync_local_neo requires O_NEO_SYNC_BIN to be set.\n' >&2
+        return 1
+    fi
+
+    "${O_NEO_SYNC_BIN}" --devel --vm "${VM_NAME}"
 }
 
 require_existing_vm() {
@@ -237,6 +265,10 @@ stage_default_debian() {
 stage_devenv() {
     run_vm_command sudo apt-get update
     run_vm_command sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y ansible git build-essential
+}
+
+stage_neo_sync() {
+    sync_local_neo
 }
 
 run_snapshot_pipeline() {
