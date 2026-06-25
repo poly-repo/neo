@@ -29,9 +29,13 @@
   set_fact:
     config_options: "{{config|join(' ') if config is defined else ''}}"
 
+- name: Define install basename
+  set_fact:
+    emacs_install_basename: "{{ 'master-' ~ ansible_date_time.date if emacs_version == 'master' else (emacs_version | string) }}"
+
 - name: Define target dir
   set_fact:
-    emacs_target_dir: "{{ ansible_user_dir }}/.local/emacs-{{emacs_version | string}}{{ '-' + suffix if suffix | length > 0 else '' }}"
+    emacs_target_dir: "{{ ansible_user_dir }}/.local/emacs-{{ emacs_install_basename }}{{ '-' + suffix if suffix | length > 0 else '' }}"
 
 
 - name: Print the target Emacs directory
@@ -98,14 +102,6 @@
       -Wl,-rpath,{{ tree_sitter_prefix }}/lib
       -L{{ tree_sitter_prefix }}/lib
       -ltree-sitter
-
-# We shouldn't remove a directory when a Emacs using it is running
-- name: remove directory
-  ansible.builtin.file:
-    path: "/usr/local/emacs/emacs-master"
-    state: absent
-  become: true
-  when: emacs_version == 'master'
 
 - name: Check if a build is needed
   stat:
