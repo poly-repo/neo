@@ -39,5 +39,24 @@
             ((symbol-function 'file-readable-p) (lambda (_f) nil)))
     (should (equal (neo/get-emacs-instance-name) "neo"))))
 
+(ert-deftest neo/nondefault-emacs-instance-p-detects-named-instances ()
+  "Treat non-default instance names as isolated Neo instances."
+  (neo/reset-cache)
+  (let ((process-environment (cons "EMACS_NAME=neo-scratch" process-environment)))
+    (should (neo/nondefault-emacs-instance-p)))
+  (neo/reset-cache)
+  (let ((process-environment (cons "EMACS_NAME=neo" process-environment)))
+    (should-not (neo/nondefault-emacs-instance-p))))
+
+(ert-deftest neo/data-file-path-uses-instance-specific-data-root ()
+  "Store Neo data under the current instance name."
+  (neo/reset-cache)
+  (let ((process-environment
+         (append '("EMACS_NAME=neo-scratch"
+                   "XDG_DATA_HOME=/tmp/neo-data")
+                 process-environment)))
+    (should (equal (neo/data-file-path "workflow.sqlite")
+                   "/tmp/neo-data/neo-scratch/workflow.sqlite"))))
+
 ;; Run all tests and exit with proper status
 (ert-run-tests-batch-and-exit)

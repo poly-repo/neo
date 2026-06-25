@@ -89,8 +89,10 @@
  elpaca-use-package
  ;; Enable :ensure support backed by Elpaca recipes.
  (elpaca-use-package-mode)
- ;; Neo expects package declarations to install unless explicitly disabled.
- (setq use-package-always-ensure '(:wait t)))
+ ;; `use-package-always-ensure' must stay boolean because use-package wraps
+ ;; defaults again before Elpaca sees them. `neo/use-package' adds the explicit
+ ;; `:ensure (:wait t)' form for Neo-managed declarations that need waiting.
+ (setq use-package-always-ensure t))
 
 ; compat is on GNU ELPA only; install via git to avoid needing the GNU ELPA cache
 (elpaca (compat :host github :repo "emacs-compat/compat"))
