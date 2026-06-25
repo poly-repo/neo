@@ -31,6 +31,8 @@ fi
 
 if [ ! -d "$VENV_PATH" ]; then
     echo "Creating virtual environment in $VENV_PATH..."
+    sudo apt install python3.11-venv
+
     python3 -m venv "$VENV_PATH"
     
     echo "Upgrading pip in new venv..."
