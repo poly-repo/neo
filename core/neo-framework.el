@@ -97,7 +97,7 @@ in 'publisher:name' format."
     
     ;; Collect installation objects in sorted order
     (dolist (slug sorted-slugs)
-      (when-let ((inst (gethash slug installed-map)))
+      (when-let* ((inst (gethash slug installed-map)))
         (push inst sorted-installations)))
     (setq sorted-installations (nreverse sorted-installations))
     
