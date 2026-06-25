@@ -42,6 +42,16 @@
   debug:
     msg: "Target Emacs directory is: {{ emacs_target_dir }}"
 
+- name: Check if a build is needed
+  stat:
+    path: "{{ emacs_target_dir }}"
+  register: install_dir
+
+- name: Skip build when target already exists
+  debug:
+    msg: "Skipping Emacs build because {{ emacs_target_dir }} already exists."
+  when: install_dir.stat.exists
+
 - name: Set Emacs base url (release candidates)
   set_fact:
     emacs_base_url: "https://alpha.gnu.org/gnu/emacs/pretest"
@@ -69,7 +79,7 @@
     state: directory
     prefix: tree-sitter-
   register: tree_sitter_build_dir
-  when: not tree_sitter_installed.stat.exists
+  when: not install_dir.stat.exists and not tree_sitter_installed.stat.exists
 
 - name: Download and extract tree-sitter {{ tree_sitter_version }}
   ansible.builtin.unarchive:
@@ -78,7 +88,7 @@
     remote_src: true
     extra_opts:
       - --strip-components=1
-  when: not tree_sitter_installed.stat.exists
+  when: not install_dir.stat.exists and not tree_sitter_installed.stat.exists
 
 - name: Build and install tree-sitter {{ tree_sitter_version }}
   ansible.builtin.command:
@@ -86,13 +96,13 @@
     chdir: "{{ tree_sitter_build_dir.path }}"
   environment:
     CFLAGS: "-fPIC"
-  when: not tree_sitter_installed.stat.exists
+  when: not install_dir.stat.exists and not tree_sitter_installed.stat.exists
 
 - name: Remove temporary build directory
   file:
     path: "{{ tree_sitter_build_dir.path }}"
     state: absent
-  when: not tree_sitter_installed.stat.exists
+  when: not install_dir.stat.exists and not tree_sitter_installed.stat.exists
 
 - name: Export tree-sitter build flags
   set_fact:
@@ -102,11 +112,7 @@
       -Wl,-rpath,{{ tree_sitter_prefix }}/lib
       -L{{ tree_sitter_prefix }}/lib
       -ltree-sitter
-
-- name: Check if a build is needed
-  stat:
-    path: "{{emacs_target_dir}}"
-  register: install_dir
+  when: not install_dir.stat.exists
 
 # - name: Display the path of install_dir
 #   debug:
@@ -117,13 +123,13 @@
     state: directory
     prefix: emacs-
   register: source_dir
-#  when: not install_dir.stat.exists
+  when: not install_dir.stat.exists
 
 - name: Set Emacs tarfile
   set_fact:
     emacs_build_dir: "{{source_dir.path}}/emacs_build"
     emacs_source_dir: "{{source_dir.path}}/emacs_source"
-#  when: not install_dir.stat.exists
+  when: not install_dir.stat.exists
 
 - name: Download
   ansible.builtin.unarchive:
@@ -138,6 +144,7 @@
 - name: version
   set_fact:
     git_commitoid: "{{'master' if emacs_version == 'master' else 'emacs-{{emacs_version}}'}}"
+  when: not install_dir.stat.exists
 
 - name: Shallow clone from git at {{ emacs_version }}
   ansible.builtin.git:
@@ -251,6 +258,7 @@
   shell: gcc --version | sed -n -e "s,^gcc.* \([0-9]*\)\.[0-9]*\.[0-9]*.*$,\1,p"
   check_mode: false
   register: gcc_major_version
+  when: not install_dir.stat.exists
 
 - name: "Build {{emacs_version}}"
   block:
