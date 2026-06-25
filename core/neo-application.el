@@ -51,7 +51,7 @@ APP-NAME is the name of the application (without the 'App:' prefix)."
         (warnings-buffer-name "*Warnings*"))
     ;; Remove forbidden buffers from the perspective
     (dolist (buf-name neo/application-forbidden-buffers)
-      (when-let ((buf (get-buffer buf-name)))
+      (when-let* ((buf (get-buffer buf-name)))
         (persp-remove-buffer buf)))
 
     ;; Delete windows showing scratch buffers or *Messages* or *Warnings*

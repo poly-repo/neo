@@ -90,7 +90,7 @@
 
 (cl-defmethod neo/render-details ((ext neo/extension))
   "Render EXT in the current buffer. Return (start . end) position."
-  (when-let ((emblem (neo/extension-emblem ext)))
+  (when-let* ((emblem (neo/extension-emblem ext)))
     (when (stringp emblem)
       (insert-image (create-image emblem 'png t))
       (insert " ")))
@@ -159,7 +159,7 @@
     (insert "\n\n")
 
     ;; Description
-    (when-let ((desc (neo/extension-description ext)))
+    (when-let* ((desc (neo/extension-description ext)))
       (insert (propertize desc 'face '(:slant italic :height 0.95)))
       (insert "\n\n"))
 
@@ -255,7 +255,7 @@ Labels are bolded, values are colored."
 (cl-defmethod neo/render ((repo neo/repository))
   "Render repository details inline."
   (dolist (key '(type url path))
-    (when-let ((val (slot-value repo key)))
+    (when-let* ((val (slot-value repo key)))
       (insert (format "%-12s: %s\n" (capitalize (symbol-name key)) val)))))
 
 (defvar neo--extensions (make-hash-table :test #'equal)
