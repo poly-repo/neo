@@ -18,6 +18,31 @@ CONFIG_ROOT = SCRIPT_DIR.parent
 # Workspace root is 3 levels up from CONFIG_ROOT (devex/editors/emacs -> root)
 WORKSPACE_ROOT = CONFIG_ROOT.parent.parent.parent
 
+# Mirror the file layout produced by devex/editors/emacs:neo copybara_workflow.
+EMACS_TREE_EXCLUDED_FILES = {
+    "BUILD.bazel",
+    "EXTERNAL_LICENSE",
+    "LICENSE_INTERNAL_README",
+    "dot_gitignore",
+    "assets/hacker.png",
+    "scripts/sync",
+}
+EMACS_TREE_EXCLUDED_DIRS = {"extensions"}
+
+DEVEL_SYNC_TREES = [
+    (CONFIG_ROOT, Path("neo")),
+    (WORKSPACE_ROOT / "infra/ansible/playbooks/emacs", Path("neo/ansible/playbooks/emacs")),
+    (WORKSPACE_ROOT / "infra/ansible/roles/emacs-install", Path("neo/ansible/roles/emacs-install")),
+    (WORKSPACE_ROOT / "infra/ansible/roles/fonts", Path("neo/ansible/roles/fonts")),
+    (WORKSPACE_ROOT / "infra/tools/font_fetcher", Path("neo/scripts/font_fetcher")),
+    (WORKSPACE_ROOT / "infra/tools/ghsync", Path("neo/scripts/ghsync")),
+]
+
+DEVEL_SYNC_FILES = [
+    (CONFIG_ROOT / "EXTERNAL_LICENSE", Path("neo/LICENSE")),
+    (CONFIG_ROOT / "dot_gitignore", Path("neo/.gitignore")),
+]
+
 @click.command()
 @click.option('--devel', is_flag=True, help='Development mode sync.')
 @click.option('--vm', default='emacs', help='Target VM name (default: emacs).')
@@ -39,12 +64,6 @@ def cli(devel, vm):
                 os.remove(tar_path)
             except OSError:
                 pass
-        copy_to_vm("infra/tools/font_fetcher/o-font-fetcher", vm)
-        run_remote_command(vm, "mkdir -p neo/scripts/font_fetcher; mv o-font-fetcher neo/scripts/font_fetcher")
-
-        copy_to_vm("infra/tools/ghsync", vm)
-        run_remote_command(vm, "mkdir -p neo/scripts/ghsync; mv ghsync neo/scripts/")
-
         copy_to_vm("~/.authinfo.gpg", vm)
         copy_to_vm("~/.gnupg", vm)
         
@@ -53,8 +72,36 @@ def cli(devel, vm):
     else:
         perform_prod_sync()
 
+def iter_tree_files(root_path, excluded_files=None, excluded_dirs=None):
+    """Yield files under root_path while pruning excluded files and directories."""
+    if not root_path.exists():
+        click.echo(f"Warning: {root_path} does not exist, skipping.", err=True)
+        return
+
+    excluded_files = excluded_files or set()
+    excluded_dirs = excluded_dirs or set()
+
+    for root, dirs, files in os.walk(root_path):
+        root_path_obj = Path(root)
+        rel_root = root_path_obj.relative_to(root_path)
+        rel_root_str = "" if rel_root == Path(".") else rel_root.as_posix()
+
+        dirs[:] = [
+            directory
+            for directory in dirs
+            if (f"{rel_root_str}/{directory}".strip("/") not in excluded_dirs)
+        ]
+
+        for file_name in files:
+            file_path = root_path_obj / file_name
+            rel_path = file_path.relative_to(root_path)
+            rel_path_str = rel_path.as_posix()
+            if rel_path_str in excluded_files:
+                continue
+            yield file_path, rel_path
+
 def perform_devel_sync():
-    """Tar the content of the config directory (excluding extensions, scripts, and BUILD.bazel) to a temp file."""
+    """Tar the development sync layout matching the Neo Copybara workflow."""
     if not CONFIG_ROOT.exists():
         click.echo(f"Error: Configuration root {CONFIG_ROOT} does not exist.", err=True)
         sys.exit(1)
@@ -67,29 +114,25 @@ def perform_devel_sync():
 
     try:
         with tarfile.open(temp_path, "w:gz") as tar:
-            # Walk the configuration directory
-            for root, dirs, files in os.walk(CONFIG_ROOT):
-                root_path = Path(root)
-                
-                # Exclude 'extensions' and 'scripts' directories from traversal
-                for skip_dir in ["extensions", "scripts"]:
-                    if skip_dir in dirs:
-                        dirs.remove(skip_dir)
-                
-                for file in files:
-                    # Skip BUILD.bazel
-                    if file == "BUILD.bazel":
-                        continue
+            for source_root, archive_root in DEVEL_SYNC_TREES:
+                excluded_files = set()
+                excluded_dirs = set()
+                if source_root == CONFIG_ROOT:
+                    excluded_files = EMACS_TREE_EXCLUDED_FILES
+                    excluded_dirs = EMACS_TREE_EXCLUDED_DIRS
 
-                    file_path = root_path / file
-                    
-                    # Calculate relative path from CONFIG_ROOT
-                    rel_path = file_path.relative_to(CONFIG_ROOT)
-                    
-                    # Map to 'neo' top-level directory
-                    arcname = Path("neo") / rel_path
-                    
-                    tar.add(file_path, arcname=str(arcname))
+                for file_path, rel_path in iter_tree_files(
+                    source_root,
+                    excluded_files=excluded_files,
+                    excluded_dirs=excluded_dirs,
+                ):
+                    tar.add(file_path, arcname=str(archive_root / rel_path))
+
+            for source_file, archive_path in DEVEL_SYNC_FILES:
+                if not source_file.exists():
+                    click.echo(f"Warning: {source_file} does not exist, skipping.", err=True)
+                    continue
+                tar.add(source_file, arcname=str(archive_path))
                     
         click.echo("Tarball created successfully.")
         return temp_path
