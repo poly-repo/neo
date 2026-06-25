@@ -126,13 +126,19 @@ run_vm_command() {
     "${O_VM_BIN}" ssh "${VM_NAME}" "$@"
 }
 
+ensure_vm_running() {
+    if vm_is_shut_off; then
+        run_vm_command true
+    fi
+}
+
 sync_local_neo() {
     if [[ -z "${O_NEO_SYNC_BIN}" ]]; then
         printf 'Error: sync_local_neo requires O_NEO_SYNC_BIN to be set.\n' >&2
         return 1
     fi
 
-    run_vm_command true
+    ensure_vm_running
     "${O_NEO_SYNC_BIN}" --devel --vm "${VM_NAME}"
 }
 
@@ -245,12 +251,15 @@ snapshot() {
         return 1
     fi
 
+    local was_running=0
+
     if virsh snapshot-info "${VM_NAME}" "${snapshot_name}" >/dev/null 2>&1; then
         printf 'Snapshot %s already exists for VM %s; skipping creation.\n' "${snapshot_name}" "${VM_NAME}"
         return 0
     fi
 
     if ! vm_is_shut_off; then
+        was_running=1
         printf 'Stopping VM %s before taking snapshot %s...\n' "${VM_NAME}" "${snapshot_name}"
         "${O_VM_BIN}" stop "${VM_NAME}"
         wait_for_vm_shutdown
@@ -258,6 +267,10 @@ snapshot() {
 
     printf 'Taking snapshot %s for VM %s...\n' "${snapshot_name}" "${VM_NAME}"
     "${O_VM_BIN}" snapshot create "${VM_NAME}" "${snapshot_name}" --description "${snapshot_description}"
+
+    if (( was_running )); then
+        ensure_vm_running
+    fi
 }
 
 revert_to_snapshot() {
