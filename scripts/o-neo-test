@@ -307,7 +307,7 @@ stage_default_debian() {
 
 stage_devenv() {
     run_vm_command sudo apt-get update
-    run_vm_command sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y ansible git build-essential
+    run_vm_command sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y ansible git build-essential cmake
 }
 
 stage_neo_sync() {
