@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t -*-
 ;;; neo --- My Emacs configuration, in its N-th reincarnation
 ;;; -*- lexical-binding: t; -*-
 

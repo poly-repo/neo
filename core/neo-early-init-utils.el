@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t -*-
 (require 'cl-lib)
 
 (defconst neo--core-dir (file-name-directory (or load-file-name buffer-file-name)))

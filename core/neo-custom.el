@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t -*-
 (defgroup neo nil
   "Configuration group for NEO Emacs"
   :prefix "neo/"

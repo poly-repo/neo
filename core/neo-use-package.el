@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t -*-
 (require 'neo-list-utils)
 
 (defun neo--alist-append (alist key value)

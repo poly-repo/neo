@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t -*-
 ;; devex/editors/emacs/test-early-init.el
 (require 'ert)
 (load-file "devex/editors/emacs/early-init.el")

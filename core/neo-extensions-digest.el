@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t -*-
 (defun neo--load-manifest (file)
   "Read and return the top-level form in FILE."
   (with-temp-buffer
