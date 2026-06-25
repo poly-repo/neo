@@ -31,6 +31,9 @@ EMACS_TREE_EXCLUDED_DIRS = {"extensions"}
 
 DEVEL_SYNC_TREES = [
     (CONFIG_ROOT, Path("neo")),
+    # Local development needs the extensions tree even though the main
+    # Copybara workflow excludes it because it normally lives in a separate repo.
+    (CONFIG_ROOT / "extensions", Path("neo/extensions")),
     (WORKSPACE_ROOT / "infra/ansible/playbooks/emacs", Path("neo/ansible/playbooks/emacs")),
     (WORKSPACE_ROOT / "infra/ansible/roles/emacs-install", Path("neo/ansible/roles/emacs-install")),
     (WORKSPACE_ROOT / "infra/ansible/roles/fonts", Path("neo/ansible/roles/fonts")),
