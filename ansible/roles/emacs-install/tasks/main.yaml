@@ -16,7 +16,27 @@
          | default(ansible_env.HOME ~ '/.local/share') }}
     vterm_install_dir: "{{ vterm_xdg_data_home }}/emacs/site-lisp/vterm"
     vterm_use_system_libvterm: false
-    
+
+- name: Select Emacs versions to install
+  set_fact:
+    emacs_versions_to_install: >-
+      {{
+        emacs_versions
+        if (requested_emacs_version | default('') | length == 0)
+        else (emacs_versions | selectattr('version', 'equalto', requested_emacs_version) | list)
+      }}
+
+- name: Validate requested Emacs version
+  ansible.builtin.assert:
+    that:
+      - emacs_versions_to_install | length > 0
+    fail_msg: >-
+      Emacs version '{{ requested_emacs_version }}' is not defined in emacs_versions.
+      Available version values: {{ emacs_versions | map(attribute='version') | unique | join(', ') }}
+  when: requested_emacs_version | default('') | length > 0
+
 - name: Install Emacs
   include_tasks: "build-emacs.yaml"
-  loop: "{{ emacs_versions }}"
+  loop: "{{ emacs_versions_to_install }}"
+  loop_control:
+    label: "{{ item.version }}{{ '-' ~ (item.suffix | default('')) if (item.suffix | default('')) | length > 0 else '' }}"

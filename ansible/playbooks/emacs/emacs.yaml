@@ -11,6 +11,9 @@
 # Install everything:
 # ansible-playbook infra/ansible/playbooks/omega-developer/omega-developer.yaml
 #
+# Install only one configured Emacs version by name:
+# ansible-playbook infra/ansible/playbooks/emacs/emacs.yaml -e emacs_version_name=master
+#
 # Install only a specific tag:
 # ansible-playbook infra/ansible/playbooks/omega-developer/omega-developer.yaml --tags llm
 #
@@ -23,6 +26,7 @@
     ansible_python_interpreter: /usr/bin/python3
     home_dir: "{{ lookup('env', 'HOME') }}"
     linux_user: "{{ lookup('env', 'USER') }}"
+    requested_emacs_version: "{{ emacs_version_name | default('') }}"
 
   roles:
     - { role: emacs-install, tags: ['slow'] }
@@ -37,4 +41,3 @@
           - Source Code Pro:google
           - Hack:nerd
           - FontAwesome:nerd
-

@@ -18,7 +18,7 @@ emacs_versions:
       - '--with-rsvg'
       - '--with-tiff'
 
-  - version: 30.2
+  - version: "30.2"
     source: release
  #   tree_sitter: 0.26.3
     tree_sitter: 0.22.6         # I think this is the last version usable w/ 30.2
@@ -35,7 +35,7 @@ emacs_versions:
       - '--with-rsvg'
       - '--with-tiff'
 
-  - version: 30.2
+  - version: "30.2"
     source: release
     suffix: gtk3
 #    tree_sitter: 0.26.3

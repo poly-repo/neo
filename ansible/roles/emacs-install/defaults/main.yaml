@@ -1,2 +1,4 @@
 ---
 # defaults file for emacs-install
+
+requested_emacs_version: ""
