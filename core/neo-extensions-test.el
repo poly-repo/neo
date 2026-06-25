@@ -9,6 +9,38 @@
 
 (require 'neo-extensions)
 
+(ert-deftest neo/use-local-extension-sources-p-requires-named-instance ()
+  "Only non-default checkout instances should use local extension sources."
+  (let ((user-emacs-directory (make-temp-file "neo-user-emacs-" t)))
+    (unwind-protect
+        (progn
+          (make-directory
+           (expand-file-name "extensions/extensions/neo" user-emacs-directory)
+           t)
+          (cl-letf (((symbol-function 'neo/nondefault-emacs-instance-p)
+                     (lambda () t)))
+            (should (neo/use-local-extension-sources-p)))
+          (cl-letf (((symbol-function 'neo/nondefault-emacs-instance-p)
+                     (lambda () nil)))
+            (should-not (neo/use-local-extension-sources-p))))
+      (delete-directory user-emacs-directory t))))
+
+(ert-deftest neo/local-registry-override-follows-publisher-layout ()
+  "Resolve local registry overrides from the checkout layout."
+  (let ((user-emacs-directory (make-temp-file "neo-user-emacs-" t))
+        expected)
+    (unwind-protect
+        (progn
+          (setq expected
+                (expand-file-name "extensions/extensions/mav"
+                                  user-emacs-directory))
+          (make-directory expected t)
+          (cl-letf (((symbol-function 'neo/use-local-extension-sources-p)
+                     (lambda () t)))
+            (should (equal (neo--local-registry-override "mav")
+                           expected))))
+      (delete-directory user-emacs-directory t))))
+
 (ert-deftest neo/extension-load-path-loads-nested-library ()
   "Make nested extension directories available for `require'."
   (let* ((extension-dir (make-temp-file "neo-extension-" t))
@@ -58,8 +90,8 @@
                      feature-name)))
           (cl-letf (((symbol-function 'neo--extensions-base-dir)
                      (lambda () base-dir))
-                    ((symbol-function 'neo/get-emacs-instance-name)
-                     (lambda () "neo-devel")))
+                    ((symbol-function 'neo/use-local-extension-sources-p)
+                     (lambda () t)))
             (should (neo--load-extension extension))
             (should (member nested-dir load-path))
             (run-hooks 'neo-extensions-test--delayed-hook)
@@ -70,6 +102,101 @@
         (unload-feature feature t))
       (fmakunbound 'neo--sample-delayed-require)
       (delete-directory base-dir t))))
+
+(ert-deftest neo/latest-registry-release-parses-github-assets ()
+  "Resolve the published manifest SHA from the latest release assets."
+  (let* ((sha "1234567890abcdef1234567890abcdef12345678")
+         (manifest-name (format "extensions-%s.el" sha))
+         (checksum-name (format "%s.sha256" manifest-name))
+         (manifest-url (format "https://example.invalid/%s" manifest-name))
+         (checksum-url (format "https://example.invalid/%s" checksum-name))
+         (registry
+          (make-neo--extension-registry
+           :name "mav"
+           :url "https://github.com/poly-repo/mav-extensions.git"))
+         (response-buffer (generate-new-buffer " *neo-release-response*"))
+         (neo--registry-release-cache (make-hash-table :test #'equal)))
+    (unwind-protect
+        (progn
+          (with-current-buffer response-buffer
+            (insert
+             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n"
+             (json-encode
+              `((assets . [((name . "notes.txt")
+                            (browser_download_url . "https://example.invalid/notes.txt"))
+                           ((name . ,manifest-name)
+                            (browser_download_url . ,manifest-url))
+                           ((name . ,checksum-name)
+                            (browser_download_url . ,checksum-url))]))))
+            (setq-local url-http-response-status 200)
+            (setq-local url-http-end-of-headers
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward "\r\n\r\n"))))
+          (cl-letf (((symbol-function 'url-retrieve-synchronously)
+                     (lambda (&rest _args)
+                       response-buffer)))
+            (let ((release (neo--latest-registry-release registry)))
+              (should (equal (neo--registry-release-sha release) sha))
+              (should (equal (neo--registry-release-manifest-url release)
+                             manifest-url))
+              (should (equal (neo--registry-release-checksum-url release)
+                             checksum-url)))))
+      (when (buffer-live-p response-buffer)
+        (kill-buffer response-buffer)))))
+
+(ert-deftest neo/fetch-extensions-uses-published-release-sha ()
+  "Fetch the manifest and content using the published release SHA."
+  (let* ((cache-root (make-temp-file "neo-extensions-cache-" t))
+         (sha "abcdef1234567890abcdef1234567890abcdef12")
+         (manifest-url (format "https://example.invalid/extensions-%s.el" sha))
+         (checksum-url (format "%s.sha256" manifest-url))
+         (registry
+          (make-neo--extension-registry
+           :name "mav"
+           :url "https://github.com/poly-repo/mav-extensions.git"))
+         copied-urls
+         downloaded-content-sha)
+    (unwind-protect
+        (cl-letf (((symbol-function 'neo/get-emacs-instance-name)
+                   (lambda ()
+                     "neo"))
+                  ((symbol-function 'neo--latest-registry-release)
+                   (lambda (_registry)
+                     (make-neo--registry-release
+                      :sha sha
+                      :manifest-url manifest-url
+                      :checksum-url checksum-url)))
+                  ((symbol-function 'neo/cache-file-path)
+                   (lambda (path)
+                     (expand-file-name path cache-root)))
+                  ((symbol-function 'url-copy-file)
+                   (lambda (source target &optional _ok-if-exists _keep-time)
+                     (push source copied-urls)
+                     (with-temp-file target
+                       (insert (if (string-suffix-p ".sha256" target)
+                                   "checksum"
+                                 ";;; -*- lexical-binding: t -*-\n")))
+                     target))
+                  ((symbol-function 'neo/download-registry-content)
+                   (lambda (_registry commit-sha)
+                     (setq downloaded-content-sha commit-sha)
+                     (let ((content-dir (expand-file-name commit-sha cache-root)))
+                       (make-directory content-dir t)
+                       content-dir))))
+          (let* ((target-file (neo/fetch-extensions registry))
+                 (cache-dir (expand-file-name "extensions/mav/" cache-root))
+                 (manifest-link (expand-file-name "extensions-current.el"
+                                                  cache-dir)))
+            (should (equal (file-name-nondirectory target-file)
+                           (format "extensions-%s.el" sha)))
+            (should (equal downloaded-content-sha sha))
+            (should (member manifest-url copied-urls))
+            (should (member checksum-url copied-urls))
+            (should (file-symlink-p manifest-link))
+            (should (equal (file-symlink-p manifest-link)
+                           (format "extensions-%s.el" sha)))))
+      (delete-directory cache-root t))))
 
 (provide 'neo-extensions-test)
 ;;; neo-extensions-test.el ends here

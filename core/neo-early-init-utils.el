@@ -3,12 +3,14 @@
 
 (defconst neo--core-dir (file-name-directory (or load-file-name buffer-file-name)))
 
+(defconst neo/default-emacs-instance-name "neo"
+  "Default Neo Emacs instance name.")
 
 (defvar neo/--emacs-instance-name-cache nil
   "Cached result of `neo/get-emacs-instance-name`.")
 
 (defun neo/get-emacs-instance-name ()
-  "Return the Emacs instance name from `--name`, or fallback to `emacs`.
+  "Return the Emacs instance name from `--name`, or fallback to Neo's default.
 
 Reads from /proc/self/cmdline if needed (Linux-only)."
   (or neo/--emacs-instance-name-cache
@@ -27,7 +29,15 @@ Reads from /proc/self/cmdline if needed (Linux-only)."
                    (when index
                      (nth (1+ index) args)))))
              ;; Fallback
-             "neo"))))
+             neo/default-emacs-instance-name))))
+
+(defun neo/default-emacs-instance-p ()
+  "Return non-nil when the current instance uses Neo's default name."
+  (string= (neo/get-emacs-instance-name) neo/default-emacs-instance-name))
+
+(defun neo/nondefault-emacs-instance-p ()
+  "Return non-nil when the current instance does not use Neo's default name."
+  (not (neo/default-emacs-instance-p)))
 
 (defconst neo--customize-disabled-message
   "Neo disables Customize persistence; edit configuration in code instead.")
@@ -106,13 +116,14 @@ signals otherwise. Delegates to `neo/load-file`."
     (message "LOADING: %s" absolute-path)
     (neo/load-file absolute-path failure-ok)))
 
-(defconst neo--data-dir
-  (expand-file-name "neo/"
-		    (or (getenv "XDG_DATA_HOME")
-			"~/.local/share")))
+(defun neo/data-directory ()
+  "Return the XDG data directory for the current Neo instance."
+  (expand-file-name (neo/get-emacs-instance-name)
+                    (or (getenv "XDG_DATA_HOME")
+                        "~/.local/share")))
 
 (defun neo/data-file-path (filename)
-  (expand-file-name filename neo--data-dir))
+  (expand-file-name filename (neo/data-directory)))
 
 (defun neo/paraphenalia (thing)
   "Return non-nil if THING should be displayed according to `neo/paraphenalia-list`.
