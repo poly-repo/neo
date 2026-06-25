@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t -*-
 ;(require 'dash)
 
 					;(use-package dash :ensure t)

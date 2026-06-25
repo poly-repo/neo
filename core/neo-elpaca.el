@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t -*-
 ;;; NOTE this first definition wins so that we don't have to remember
 ;;; to modify the installer and we can simply copy and paste it.
 ;;; It would be great if elpaca provided that as a downloadable asset
