@@ -1,6 +1,7 @@
 ;;; neo-application.el --- Application management for Neo -*- lexical-binding: t -*-
 
 (require 'cl-lib)
+(require 'subr-x)
 
 (defgroup neo-application nil
   "Settings for Neo applications."
@@ -18,10 +19,21 @@
   name
   setup
   teardown
-  binding)
+  binding
+  command)
 
 (defvar neo--applications (make-hash-table :test #'equal)
   "Hash table mapping application names to `neo/application` instances.")
+
+(defun neo/applications ()
+  "Return registered `neo/application' instances, sorted by name."
+  (sort (hash-table-values neo--applications)
+        (lambda (a b)
+          (string< (neo/application-name a) (neo/application-name b)))))
+
+(defun neo/application-names ()
+  "Return the sorted list of registered Neo application names."
+  (mapcar #'neo/application-name (neo/applications)))
 
 (defvar neo--last-user-perspective nil
   "The name of the perspective active before entering a Neo application.")
@@ -125,7 +137,8 @@ Keywords arguments:
                  :name ,name
                  :setup ',setup
                  :teardown ',augmented-teardown
-                 :binding ,binding)
+                 :binding ,binding
+                 :command ',cmd-name)
                 neo--applications))))
 
 (neo/application "Calc"
