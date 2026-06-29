@@ -8,6 +8,14 @@
   :group 'neo
   :prefix "neo-application-")
 
+(defcustom neo-application-default-quit-keys '("q")
+  "Keys that leave a Neo application and restore the previous perspective.
+Each entry is a `kbd' string.  Applications inherit this list unless they
+pass an explicit `:quit-keys' to `neo/application'; a value of nil leaves
+the native quit behavior of the application untouched."
+  :type '(repeat string)
+  :group 'neo-application)
+
 (defvar neo/applications-map (make-sparse-keymap)
   "Keymap for Neo applications.")
 
@@ -20,7 +28,8 @@
   setup
   teardown
   binding
-  command)
+  command
+  quit-keys)
 
 (defvar neo--applications (make-hash-table :test #'equal)
   "Hash table mapping application names to `neo/application` instances.")
@@ -90,6 +99,25 @@ APP-NAME is the name of the application (without the 'App:' prefix)."
             (eval (neo/application-teardown app)))
         (user-error "Unknown application: %s" app-name)))))
 
+(defun neo/application--install-quit-keys (keys)
+  "Bind each key in KEYS to `neo/leave-current-application' in this buffer.
+KEYS is a list of `kbd' strings.  The bindings live in a buffer-local
+keymap that overrides `neo-application-mode' for the current buffer only,
+so they take precedence over the application's own major-mode bindings
+without mutating any shared keymap.  The map inherits
+`neo-application-mode-map', preserving its default bindings.  With KEYS
+nil nothing is installed and the native quit behavior is left untouched."
+  (when keys
+    (let ((map (make-sparse-keymap)))
+      (set-keymap-parent map neo-application-mode-map)
+      (dolist (key keys)
+        (define-key map (kbd key) #'neo/leave-current-application))
+      (setq-local minor-mode-overriding-map-alist
+                  (cons (cons 'neo-application-mode map)
+                        (assq-delete-all
+                         'neo-application-mode
+                         (copy-alist minor-mode-overriding-map-alist)))))))
+
 (defmacro neo/application (name &rest args)
   "Register a new Neo application.
 
@@ -98,11 +126,21 @@ NAME is the name of the application (string).
 Keywords arguments:
 :setup     - Form to run to set up the application.
 :teardown  - Form to run to tear down the application (optional).
-:bind      - Keybinding key (string) relative to `neo/applications-map`."
+:bind      - Keybinding key (string) relative to `neo/applications-map`.
+:quit-keys - Unquoted list of `kbd' strings (e.g. (\"q\")) that leave the
+             application and restore the previous perspective.  Defaults
+             to `neo-application-default-quit-keys'; pass nil to keep the
+             native quit behavior of the application."
   (declare (indent 1))
   (let* ((setup (plist-get args :setup))
          (teardown (plist-get args :teardown))
          (binding (plist-get args :bind))
+         ;; Resolve the default at runtime, not expansion time: the value
+         ;; of `neo-application-default-quit-keys' is not available while
+         ;; byte-compiling the files that register applications.
+         (quit-keys-form (if (plist-member args :quit-keys)
+                             (list 'quote (plist-get args :quit-keys))
+                           'neo-application-default-quit-keys))
          (cmd-name (intern (format "neo/app-%s" (replace-regexp-in-string " " "-" (downcase name)))))
          (augmented-teardown
           `(progn
@@ -129,7 +167,14 @@ Keywords arguments:
              (persp-switch app-persp-name)
              ,setup
              (neo/application--post-setup-cleanup ,name)
-             (neo-application-mode 1)))))
+             ;; `setup' may run inside `with-current-buffer' (e.g.
+             ;; `elpaca-manager'), so the current buffer can revert once it
+             ;; returns even though the application's window is selected.
+             ;; Target the selected window's buffer so the minor mode and
+             ;; quit keys land on the application's actual buffer.
+             (with-current-buffer (window-buffer (selected-window))
+               (neo-application-mode 1)
+               (neo/application--install-quit-keys ,quit-keys-form))))))
        ,@(when binding
            `((define-key neo/applications-map (kbd ,binding) #',cmd-name)))
        (puthash ,name
@@ -138,7 +183,8 @@ Keywords arguments:
                  :setup ',setup
                  :teardown ',augmented-teardown
                  :binding ,binding
-                 :command ',cmd-name)
+                 :command ',cmd-name
+                 :quit-keys ,quit-keys-form)
                 neo--applications))))
 
 (neo/application "Calc"
@@ -147,6 +193,9 @@ Keywords arguments:
 
 (neo/application "Dashboard"
   :setup (neo/dashboard)
-  :bind "d")
+  :bind "d"
+  ;; The dashboard owns its own "q" binding (`neo/dashboard-quit'), which
+  ;; restores the perspective it displaced; leave it untouched.
+  :quit-keys nil)
 
 (provide 'neo-application)
