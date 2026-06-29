@@ -54,9 +54,10 @@
   (elpaca-wait)
   (condition-case err
       (simple-modeline-mode 1)
-    (file-missing (message "NEO: simple-modeline not available: %s" (error-message-string err))))
-  (when (fboundp 'neo/dashboard)
-    (neo/dashboard)))
+    (file-missing (message "NEO: simple-modeline not available: %s" (error-message-string err)))))
+  ;; The dashboard is shown via `neo/after-perspective-restore-hook' once
+  ;; `persp-state-load' has restored perspectives, so it lands last and does
+  ;; not flicker through a restored project perspective. See neo-dashboard.el.
   
 (if neo/first-run
     (display-startup-screen)

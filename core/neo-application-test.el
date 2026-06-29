@@ -74,6 +74,16 @@
         (expect (length (window-list)) :to-be 1)
         ))
 
+  (it "stores registered applications and exposes them"
+    (neo/application "Stored" :setup (ignore) :bind "s")
+    (let ((app (gethash "Stored" neo--applications)))
+      (expect app :to-be-truthy)
+      (expect (neo/application-name app) :to-equal "Stored")
+      (expect (neo/application-binding app) :to-equal "s")
+      (expect (neo/application-command app) :to-equal 'neo/app-stored))
+    (expect (neo/application-names) :to-contain "Stored")
+    (expect (cl-every #'neo/application-p (neo/applications)) :to-be-truthy))
+
   (it "allows switching between applications"
     (neo/application "App1" :setup (ignore))
     (neo/application "App2" :setup (ignore))
