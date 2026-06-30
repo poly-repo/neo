@@ -11,12 +11,12 @@ package is required.
 
 ** Role Variables
 
-A description of the settable variables for this role should go here,
-including any variables that are in defaults/main.yaml,
-vars/main.yaml, and any variables that can/should be set via
-parameters to the role. Any variables that are read from other roles
-and/or the global scope (ie. hostvars, group vars, etc.) should be
-mentioned here as well.
+- =requested_emacs_version= (default ="="): build only the matching entry
+  from =emacs_versions=; empty builds them all.
+- =emacs_versions= (vars/main.yaml): the list of Emacs builds (master + the
+  configured releases) with their =configure= flags and tree-sitter version.
+- =emacs_keep_daily_builds= (default =3=): how many date-stamped daily
+  =master= builds to keep under =~/.local=. See "Daily master builds" below.
 
 ** Dependencies
 
@@ -32,6 +32,31 @@ variables passed in as parameters) is always nice for users too:
     - hosts: servers
       roles:
          - { role: emacs-install, x: 42 }
+
+** Daily master builds
+
+The =master= build installs to =~/.local/emacs-master-YYYY-MM-DD[-suffix]= and
+is skipped when today's directory already exists, so it is effectively one
+build per day. After each run the role prunes these date-stamped directories
+down to the newest =emacs_keep_daily_builds= (the undated legacy
+=emacs-master-<suffix>= is never touched).
+
+To build one automatically every day, two scripts live in
+=infra/ansible/scripts/=:
+
+- =o-emacs-daily-cron [install|remove|show]=: installs a managed crontab block
+  that builds the master daily at noon (=EMACS_DAILY_HOUR=, default 12) and
+  adds an =@reboot= catch-up entry.
+- =o-emacs-daily-build [REPO]=: the worker the crontab calls. It is idempotent
+  (skips when today's build exists) and only builds once the scheduled hour has
+  passed, so a boot before noon defers to the timed entry while a boot after
+  noon builds the daily that was missed while the machine was off.
+
+A stock crontab does not run jobs missed while powered off; the =@reboot= entry
+plus this gating is what provides the catch-up. It covers power-off but not
+suspend/resume — for that, prefer a systemd user timer with =Persistent=true=.
+The build runs =make install= under ansible =become=, so unattended cron runs
+need passwordless sudo.
 
 ** License
 

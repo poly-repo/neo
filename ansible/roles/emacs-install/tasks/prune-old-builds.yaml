@@ -1,0 +1,43 @@
+---
+# Keep only the newest `emacs_keep_daily_builds` date-stamped daily master
+# builds under ~/.local; delete the older ones. Build directories are named
+# emacs-master-YYYY-MM-DD[-suffix] (see build-emacs.yaml), so a lexical sort is
+# chronological. The undated legacy directory (emacs-master-<suffix>) does not
+# match the pattern and is left alone.
+
+- name: Find date-stamped daily master Emacs builds
+  ansible.builtin.find:
+    paths: "{{ ansible_user_dir }}/.local"
+    patterns: 'emacs-master-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+    file_type: directory
+    recurse: false
+  register: daily_master_builds
+
+- name: Compute which daily master builds to prune
+  set_fact:
+    # Oldest first, then drop all but the newest N.
+    emacs_daily_builds_sorted: "{{ daily_master_builds.files | map(attribute='path') | sort | list }}"
+    emacs_daily_builds_prune_count: "{{ [(daily_master_builds.files | length) - (emacs_keep_daily_builds | int), 0] | max }}"
+
+- name: Select the oldest daily master builds for removal
+  set_fact:
+    emacs_daily_builds_to_remove: "{{ emacs_daily_builds_sorted[:emacs_daily_builds_prune_count | int] }}"
+
+- name: Report daily master build retention
+  ansible.builtin.debug:
+    msg: >-
+      Found {{ daily_master_builds.files | length }} daily master build(s);
+      keeping newest {{ emacs_keep_daily_builds }},
+      removing {{ emacs_daily_builds_to_remove | length }}:
+      {{ emacs_daily_builds_to_remove | map('basename') | list }}
+
+# Build directories are installed with `become` (make install / src copy run as
+# root), so they are root-owned and must be removed with elevated privileges.
+- name: Remove old daily master Emacs builds
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ emacs_daily_builds_to_remove }}"
+  loop_control:
+    label: "{{ item | basename }}"
+  become: true
