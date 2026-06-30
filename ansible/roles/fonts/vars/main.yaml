@@ -1,6 +1,8 @@
 font_base_directory: "{{ home_dir }}/.fonts"
 
 font_families:
+  - Iosevka:nerd
+  - Patrick Hand:google
   - Roboto:google
   - Tangerine:google
   - Nunito Sans:google
