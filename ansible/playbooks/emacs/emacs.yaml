@@ -30,14 +30,7 @@
 
   roles:
     - { role: emacs-install, tags: ['slow'] }
-    - role: fonts
-      tags: ['slow']
-      vars:
-        font_families:
-          - Roboto:google
-          - Tangerine:google
-          - Nunito Sans:google
-          - Noto Music:google
-          - Source Code Pro:google
-          - Hack:nerd
-          - FontAwesome:nerd
+    # Font families come from the role's vars (roles/fonts/vars/main.yaml),
+    # the single source of truth. Do not re-list them here as role params:
+    # role params outrank role vars and would shadow edits to that file.
+    - { role: fonts, tags: ['slow'] }

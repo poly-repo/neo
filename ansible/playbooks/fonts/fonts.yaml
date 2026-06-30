@@ -1,0 +1,27 @@
+# Download and install the fonts used by the Omega development environment.
+#
+# This runs the standalone `fonts` role, which fetches each configured
+# family (Google Fonts and Nerd Fonts) into the user's font directory. It
+# is the same role pulled in by the emacs and omega-developer playbooks,
+# exposed here so fonts can be (re)installed on their own.
+#
+# you can run with:
+#
+# Install the default font set:
+# ansible-playbook infra/ansible/playbooks/fonts/fonts.yaml
+#
+# The list of families lives in the role's vars (roles/fonts/vars/main.yaml),
+# which is the single source of truth. Override it for a one-off run with:
+# ansible-playbook infra/ansible/playbooks/fonts/fonts.yaml \
+#   -e '{"font_families": ["Hack:nerd", "Source Code Pro:google"]}'
+
+- hosts: localhost
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    home_dir: "{{ lookup('env', 'HOME') }}"
+    linux_user: "{{ lookup('env', 'USER') }}"
+
+  roles:
+    - role: fonts
+      tags: ['slow']
