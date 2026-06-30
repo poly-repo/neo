@@ -40,3 +40,8 @@
   loop: "{{ emacs_versions_to_install }}"
   loop_control:
     label: "{{ item.version }}{{ '-' ~ (item.suffix | default('')) if (item.suffix | default('')) | length > 0 else '' }}"
+
+- name: Prune old daily master builds
+  include_tasks: "prune-old-builds.yaml"
+  tags:
+    - prune

@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# -*- shell-script -*-
+# Install (or remove) a crontab entry that builds the Emacs "master" daily at
+# noon, with offline catch-up the next time the machine is powered on.
+#
+# Usage:
+#   o-emacs-daily-cron [install]   add/refresh the managed crontab block (default)
+#   o-emacs-daily-cron remove      remove the managed crontab block
+#   o-emacs-daily-cron show        print the managed crontab block (no changes)
+#
+# Environment:
+#   EMACS_DAILY_HOUR   scheduled hour 0-23 (default 12)
+#
+# The managed block has two entries, both calling o-emacs-daily-build:
+#   0 <HOUR> * * *   the normal daily build at noon
+#   @reboot          catch-up: a stock crontab does NOT run jobs missed while
+#                    the machine was off, so this fires on the next boot. The
+#                    worker only builds when the scheduled hour has passed and
+#                    today's build is missing, so an early boot defers to the
+#                    timed entry and a late boot builds the missed daily.
+#
+# NOTE: the build runs `make install` under ansible `become: true`, so the
+# crontab user needs passwordless sudo for unattended runs to succeed.
+# Catch-up covers power-off (via @reboot); it does not cover suspend/resume.
+# For that, prefer a systemd user timer with `Persistent=true`.
+
+set -euo pipefail
+
+HOUR="${EMACS_DAILY_HOUR:-12}"
+action="${1:-install}"
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo=$(git -C "$script_dir" rev-parse --show-toplevel)
+worker="$repo/infra/ansible/scripts/o-emacs-daily-build"
+
+begin="# >>> o-emacs-daily (managed by o-emacs-daily-cron) >>>"
+end="# <<< o-emacs-daily (managed by o-emacs-daily-cron) <<<"
+log_file="$HOME/.cache/emacs-daily-cron.log"
+ansible_bin=$(command -v ansible-playbook || true)
+
+# Bake the resolved ansible-playbook path and scheduled hour into the entries
+# so cron's minimal PATH still finds the tools at run time.
+build_cmd="EMACS_DAILY_HOUR=$HOUR ANSIBLE_PLAYBOOK='${ansible_bin:-ansible-playbook}' '$worker' '$repo' >> '$log_file' 2>&1"
+
+managed_block() {
+    cat <<EOF
+$begin
+# Build the Emacs master daily at ${HOUR}:00.
+0 $HOUR * * * $build_cmd
+# Catch up a daily missed while powered off, on the next boot (after ${HOUR}:00).
+@reboot $build_cmd
+$end
+EOF
+}
+
+# Print the current crontab with any previous managed block removed.
+current_without_block() {
+    crontab -l 2>/dev/null | awk -v b="$begin" -v e="$end" '
+        $0 == b { inblock = 1; next }
+        inblock && $0 == e { inblock = 0; next }
+        !inblock { print }'
+}
+
+case "$action" in
+    show)
+        managed_block
+        ;;
+    remove)
+        current_without_block | crontab -
+        echo "Removed managed Emacs daily crontab block."
+        ;;
+    install)
+        if [[ ! -x "$worker" ]]; then
+            echo "Error: worker not found or not executable: $worker" >&2
+            exit 1
+        fi
+        if [[ -z "$ansible_bin" ]]; then
+            echo "Warning: ansible-playbook not found on PATH; baking the literal name." >&2
+        fi
+        mkdir -p "$(dirname "$log_file")"
+        { current_without_block; managed_block; } | crontab -
+        echo "Installed Emacs daily crontab block (build at ${HOUR}:00, catch-up @reboot)."
+        echo "Logs: $log_file"
+        echo "Reminder: the build uses sudo (ansible become); ensure passwordless sudo for unattended runs."
+        ;;
+    *)
+        echo "Usage: $0 [install|remove|show]" >&2
+        exit 1
+        ;;
+esac

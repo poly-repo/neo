@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# -*- shell-script -*-
+# Build today's Emacs "master" daily unless it already exists.
+#
+# This is the gating wrapper invoked from cron (see o-emacs-daily-cron). It
+# gives plain crontab an anacron-like catch-up:
+#   - skips when today's build directory already exists (the build is
+#     date-stamped and idempotent, so repeated runs are cheap no-ops);
+#   - only builds once the scheduled hour has passed, so an @reboot run that
+#     fires before noon defers to the noon entry, while a boot *after* noon
+#     (the machine was off at noon) catches the missed build up.
+#
+# Usage: o-emacs-daily-build [REPO_DIR]
+#   REPO_DIR defaults to the git repo this script lives in.
+#
+# Environment:
+#   EMACS_DAILY_HOUR     scheduled hour 0-23 (default 12)
+#   ANSIBLE_PLAYBOOK     ansible-playbook executable (default "ansible-playbook")
+#   EMACS_DAILY_DRY_RUN  when set, report the decision instead of building
+
+set -euo pipefail
+
+HOUR="${EMACS_DAILY_HOUR:-12}"
+ANSIBLE_PLAYBOOK="${ANSIBLE_PLAYBOOK:-ansible-playbook}"
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo="${1:-$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)}"
+
+log() {
+    printf '%s o-emacs-daily-build: %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"
+}
+
+today=$(date +%F)
+
+# Already built today? Nothing to do.
+if compgen -G "$HOME/.local/emacs-master-${today}-*" >/dev/null 2>&1; then
+    log "today's build (emacs-master-${today}-*) already present; nothing to do"
+    exit 0
+fi
+
+# Before the scheduled hour with no build yet: let the timed entry handle it.
+# 10# forces base-10 so "09" is not misread as octal.
+if (( 10#$(date +%H) < 10#$HOUR )); then
+    log "before scheduled hour ${HOUR}:00 and no build yet; deferring to the timed run"
+    exit 0
+fi
+
+if [[ -z "$repo" ]]; then
+    log "ERROR: could not determine repository root; pass REPO_DIR explicitly"
+    exit 1
+fi
+
+playbook="$repo/infra/ansible/playbooks/emacs/emacs.yaml"
+if [[ ! -f "$playbook" ]]; then
+    log "ERROR: playbook not found at $playbook"
+    exit 1
+fi
+
+if [[ -n "${EMACS_DAILY_DRY_RUN:-}" ]]; then
+    log "DRY RUN: would build today's master daily via $playbook"
+    exit 0
+fi
+
+log "building today's master daily ($today)"
+cd "$repo"
+exec "$ANSIBLE_PLAYBOOK" "$playbook" -e emacs_version_name=master
