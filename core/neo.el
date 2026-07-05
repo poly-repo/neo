@@ -1,14 +1,19 @@
 ;;; -*- lexical-binding: t -*-
-(setq debug-on-error t)
 
-(setq message-log-max 100000)
+;; `neo--mode' and the `neo/debug-p' switch are defined in
+;; neo-early-init-utils (loaded from early-init.el).  Require it here so this
+;; file also works when loaded directly (tests, byte-compilation).
+(require 'neo-early-init-utils)
 
+;; Keep startup quiet by default; enable backtraces and a large message log
+;; only when debugging (emacs --debug-init, or NEO_MODE=debug).
+(when neo/debug-p
+  (setq debug-on-error t)
+  (setq message-log-max 100000))
 
 ;;;###autoload
 (defvar neo/use-extensions  t
   "When t we use neo extension mechanism. nil make immediate use of use-package")
-
-(defvar neo--mode (getenv "NEO_MODE"))
 
 (defun neo--require (feature)
   "A wrapper around `require` for FEATURE."

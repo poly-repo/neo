@@ -1,9 +1,39 @@
-;;; -*- lexical-binding: t -*-
-;;; NOTE this first definition wins so that we don't have to remember
-;;; to modify the installer and we can simply copy and paste it.
-;;; It would be great if elpaca provided that as a downloadable asset
-;;; with each release and a summary of changes to go with it, but we
-;;; live with what we have and elpaca is great anyhow.
+;;; neo-elpaca.el --- Elpaca bootstrap with a no-littering redirect -*- lexical-binding: t -*-
+;;
+;; ---------------------------------------------------------------------------
+;; Elpaca bootstrap (installer version 0.12)
+;; ---------------------------------------------------------------------------
+;; The installer block further down (between the BEGIN/END markers) is copied
+;; VERBATIM from Elpaca's official installer so we can refresh it by plain
+;; copy-paste when Elpaca ships a new version.  Our only desired change vs
+;; upstream is to place Elpaca's tree under `no-littering-var-directory'
+;; (~/.cache/<instance>) instead of `user-emacs-directory', to keep the config
+;; dir clean.
+;;
+;; We do that WITHOUT editing the pasted block, by pre-binding `elpaca-directory'
+;; here, before the installer runs.  Two `defvar' guarantees make this work:
+;;   1. `defvar' does NOT change a variable that already has a value; and
+;;   2. in that case it does not even EVALUATE its value form.
+;; So once we bind `elpaca-directory' below, the installer's own
+;; `(defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))'
+;; is a pure no-op, and `elpaca-builds-directory'/`elpaca-sources-directory'
+;; (also verbatim) derive from OUR value.
+;;
+;; `makunbound' first makes the redirect win even if something already bound
+;; `elpaca-directory' (Elpaca preloaded, or this file re-evaluated).
+;;
+;; INVARIANT: this pre-binding MUST run BEFORE the installer block.  If a future
+;; paste lands above it, or it is reordered, the redirect silently fails and
+;; Elpaca litters `user-emacs-directory' with no error — the `cl-assert' right
+;; after the installer guards against exactly that.
+;;
+;; DEVIATIONS from pure-verbatim are kept OUTSIDE the marked region, after it
+;; (an `advice-add' for enqueue de-duplication and a `-90' depth on the
+;; `after-init-hook').  Requires `no-littering-var-directory' (from early-init).
+;; ---------------------------------------------------------------------------
+
+(require 'cl-lib)                       ; for `cl-assert' and `cl-loop' below
+
 (makunbound 'elpaca-directory)
 (defvar elpaca-directory (expand-file-name "elpaca/" no-littering-var-directory))
 
@@ -42,7 +72,10 @@
 
 ;; (add-hook 'elpaca-post-queue-hook #'+elpaca-hide-successful-log)
 
-;;; The following is the installer copied from the elpaca github
+;;; >>> BEGIN elpaca installer (v0.12) — VERBATIM, do not edit inside >>>
+;;; Refresh by pasting a newer upstream installer here.  `elpaca-directory' is
+;;; redirected by the pre-binding at the top of this file (see header); the
+;;; `(defvar elpaca-directory …)' just below is therefore intentionally a no-op.
 (defvar elpaca-installer-version 0.12)
 (defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
@@ -79,6 +112,17 @@
     (require 'elpaca)
     (elpaca-generate-autoloads "elpaca" repo)
     (let ((load-source-file-function nil)) (load "./elpaca-autoloads"))))
+;;; <<< END elpaca installer (v0.12) <<<
+
+;; Fail loudly if the redirect at the top did not take (see header INVARIANT):
+;; a partial or reordered paste would otherwise silently litter
+;; `user-emacs-directory'.
+(cl-assert (string-prefix-p (expand-file-name no-littering-var-directory)
+                            (expand-file-name elpaca-directory))
+           t "NEO: elpaca-directory redirect failed — the no-littering \
+pre-binding must precede the installer block (got %s)" elpaca-directory)
+
+;; --- NEO additions (NOT part of the verbatim installer) ---
 (advice-add 'elpaca--enqueue :around #'neo--elpaca-enqueue-deduplicate)
 (add-hook 'after-init-hook #'elpaca-process-queues -90)
 (elpaca `(,@elpaca-order))

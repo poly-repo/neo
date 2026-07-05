@@ -66,24 +66,30 @@ VENV-PATH defaults to .python inside `user-emacs-directory`."
 
 
 (defvar neo--disposable-processes '()
-  "List of rx-style patterns for disposable process buffers.")
+  "List of regexps matching disposable process buffer names.
+Populated by `neo/register-disposable-process', which precompiles each
+registered pattern to a regexp string so the `make-process' advice does no
+per-spawn evaluation.")
 
 (defun neo/register-disposable-process (rx-form)
-  "Add an rx-style RX-FORM to the disposable process list."
-  (cl-pushnew rx-form neo--disposable-processes :test #'equal))
+  "Register RX-FORM as matching disposable process buffers.
+RX-FORM may be a regexp string or an `rx' form (e.g. (rx \"*gemini*\")); it is
+compiled to a regexp once, here, rather than on every process spawn."
+  (let ((regexp (if (stringp rx-form) rx-form (eval rx-form t))))
+    (cl-pushnew regexp neo--disposable-processes :test #'equal)))
 
 (defun neo--advise-silence-disposable-process (proc)
-  "Check if PROC should be silenced based on NEO registry."
-  (let ((buf (process-buffer proc)))
-    (when (and buf 
-               (cl-some (lambda (pattern) 
-                          (string-match-p (eval pattern) (buffer-name buf)))
-                        neo--disposable-processes))
-      (message "ANNOTATING PROCESS %S" proc)
-      (set-process-query-on-exit-flag proc nil)
-      (with-current-buffer buf
-        (setq-local buffer-save-without-query t)
-        )))
+  "Silence PROC when its buffer matches a registered disposable pattern.
+Fast no-op when nothing is registered (the common startup case)."
+  (when neo--disposable-processes
+    (let ((buf (process-buffer proc)))
+      (when (and buf
+                 (cl-some (lambda (regexp)
+                            (string-match-p regexp (buffer-name buf)))
+                          neo--disposable-processes))
+        (set-process-query-on-exit-flag proc nil)
+        (with-current-buffer buf
+          (setq-local buffer-save-without-query t)))))
   proc)
 
 (advice-add 'make-process :filter-return #'neo--advise-silence-disposable-process)
