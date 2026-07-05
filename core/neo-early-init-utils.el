@@ -3,6 +3,17 @@
 
 (defconst neo--core-dir (file-name-directory (or load-file-name buffer-file-name)))
 
+(defvar neo--mode (getenv "NEO_MODE")
+  "Value of the NEO_MODE environment variable at startup, or nil.")
+
+(defvar neo/debug-p (or init-file-debug (equal neo--mode "debug"))
+  "Non-nil when NEO should be verbose at startup.
+Enabled by `emacs --debug-init' (which sets `init-file-debug') or by the
+NEO_MODE=debug environment variable.  Drives `debug-on-error',
+`message-log-max', and native-comp warning reporting; default is quiet.
+Defined here, in the earliest-loaded core file, so both early-init.el and
+`neo.el' can consult it.")
+
 (defconst neo/default-emacs-instance-name "neo"
   "Default Neo Emacs instance name.")
 
@@ -113,7 +124,6 @@ signals otherwise. Delegates to `neo/load-file`."
 Returns t on success, nil on failure (if FAILURE-OK is non-nil), and
 signals otherwise. Delegates to `neo/load-file`."
   (let ((absolute-path (neo/cache-file-path filename)))
-    (message "LOADING: %s" absolute-path)
     (neo/load-file absolute-path failure-ok)))
 
 (defun neo/data-directory ()

@@ -35,18 +35,6 @@
   (ring-insert neo/log-entries entry))
 
 (defun neo/log--push (level source fmt &rest args)
-  "Push a new log entry."
-  (let ((details (plist-get args :details)))
-    (let ((entry (make-neo/log-entry
-                  :time (float-time)
-                  :level level
-                  :source source
-                  :message (apply #'format fmt args)
-                  :details details)))
-      (neo/log--store entry)
-      entry)))
-
-(defun neo/log--push (level source fmt &rest args)
   "Push a new log entry with LEVEL, SOURCE, formatted FMT and ARGS.
 If ARGS contains a plist with :details, it is extracted."
   (let* ((details (when args

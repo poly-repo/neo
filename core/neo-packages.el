@@ -62,12 +62,13 @@ If SLUG is provided, a `neo/extension-slug` object, only replays that entry."
                    form
                    neo--replayed-package-installs))))))))
 
-;;; TODO: figure out where duplicate packages get queued
-;;; till then is very annoying to see things like:
-;;; ⛔ Warning (emacs): Duplicate item queued: ace-window
-;;; ⛔ Warning (emacs): Duplicate item queued: magit
-;;; ⛔ Warning (emacs): Duplicate item queued: org-roam
-;(setq warning-minimum-level :error)
+;;; NOTE: Elpaca emits "Duplicate item ID queued: X" via plain `warn' (warning
+;;; type `emacs'), so it cannot be suppressed by type without also hiding
+;;; unrelated `emacs' warnings — we deliberately do NOT blanket-suppress it.
+;;; The root cause is handled by `neo--elpaca-enqueue-deduplicate' (neo-elpaca.el),
+;;; which returns the already-queued entry instead of re-queueing.  Precisely
+;;; typed benign warnings (defvaralias, lexical-binding) are suppressed in
+;;; early-init.el via `warning-suppress-types'.
 
 ;; probably need to ensure it is run early
 (use-package no-littering

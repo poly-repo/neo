@@ -39,17 +39,25 @@ This variable is used by `neo/paraphenalia` to determine visibility of UI compon
 (setq package-enable-at-startup nil)
 (setq package-activated-list nil)
 
-(setq native-comp-async-report-warnings-errors nil)
+;; Silence intrusive, unactionable warnings from intentional variable aliases
+;; and from packages that harmlessly touch lexical-binding — same benign set
+;; Doom suppresses.  Real warnings of other types still surface.
+(setq warning-suppress-types '((defvaralias) (lexical-binding)))
 
 (add-to-list 'load-path
              (expand-file-name "core" (file-name-directory (or load-file-name buffer-file-name))))
 (require 'neo-early-init-utils)
 
+;; Report native-comp async warnings/errors only when debugging (see
+;; `neo/debug-p', defined in neo-early-init-utils).  Requires the load-path
+;; and require above, hence its placement here rather than at the top.
+(setq native-comp-async-report-warnings-errors neo/debug-p)
+
 (eval-and-compile
   (defvar neo/cache-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CACHE_HOME") "~/.cache")))
-  (defvar neo/config-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.config"))))
+  (defvar neo/config-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.config")))
   (defvar no-littering-etc-directory neo/config-directory)
-  (defvar no-littering-var-directory neo/cache-directory)
+  (defvar no-littering-var-directory neo/cache-directory))
 
 (neo/disable-customize-persistence)
 

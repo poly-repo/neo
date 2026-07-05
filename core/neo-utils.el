@@ -53,7 +53,8 @@ and return a quit function that restores the original perspective."
   (let ((dir (neo/get-current-file-dir)))
     (when dir
       (add-to-list 'load-path dir)
-      (message "Added %s to load-path" dir))))
+      (when (fboundp 'neo/log-debug)
+        (neo/log-debug 'core "Added %s to load-path" dir)))))
 
 (defun neo/select-or-create-frame (name)
   (let ((frame
