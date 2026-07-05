@@ -24,7 +24,20 @@ HOUR="${EMACS_DAILY_HOUR:-12}"
 ANSIBLE_PLAYBOOK="${ANSIBLE_PLAYBOOK:-ansible-playbook}"
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-repo="${1:-$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)}"
+
+# Resolve the tree root that holds ansible.cfg and infra/ansible/. In the repo
+# that is the git toplevel; in a standalone install (o-emacs-daily-cron copies
+# the tree under e.g. ~/.local/emacs-cron, mirroring the repo layout) there is
+# no .git, so fall back to three levels up from this script
+# (…/infra/ansible/scripts → root).
+if [[ -n "${1:-}" ]]; then
+    repo="$1"
+else
+    repo=$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)
+    if [[ -z "$repo" ]]; then
+        repo=$(cd -- "$script_dir/../../.." && pwd)
+    fi
+fi
 
 log() {
     printf '%s o-emacs-daily-build: %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"
