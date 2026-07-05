@@ -4,7 +4,7 @@ emacs_versions:
   - version: master
     source: git
     suffix: gtk3
-    tree_sitter: 0.26.3
+    tree_sitter: 0.26.10
 
     config:
       - '--disable-gc-mark-trace'
