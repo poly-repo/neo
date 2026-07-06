@@ -266,4 +266,95 @@ Return value is non-nil if THING should be shown, nil otherwise."
 (advice-add 'fancy-splash-insert :around #'neo/fancy-splash--replace-args)
 (advice-add 'normal-splash-screen :after #'neo/normal-splash-screen-extra)
 
+
+;;; Frame-size floor --------------------------------------------------------
+;; Guarantee frames come up at a decent, splittable size even when no geometry
+;; was saved (a fresh instance) or a stale/implausibly small one was restored
+;; (e.g. a child/pop-up frame captured at exit).  See `neo/ensure-frame-size-floor'.
+
+(defvar neo/default-frame-width 140
+  "Default initial frame width in columns when no sane size is restored.")
+
+(defvar neo/default-frame-height 42
+  "Default initial frame height in rows when no sane size is restored.")
+
+(defvar neo/minimum-frame-pixel-width 500
+  "Restored frames narrower than this many pixels are treated as bogus
+\(e.g. a child/pop-up frame captured at exit) and reset to the default.")
+
+(defvar neo/minimum-frame-pixel-height 350
+  "Restored frames shorter than this many pixels are treated as bogus and
+reset to the default.")
+
+(defvar neo/minimum-frame-cols 24
+  "Restored frames narrower than this many columns are treated as bogus.")
+
+(defvar neo/minimum-frame-rows 10
+  "Restored frames shorter than this many rows are treated as bogus.")
+
+(defvar neo--restored-frame-geometry nil
+  "Frame size/position restored from disk at startup.
+Captured by `neo/ensure-frame-size-floor' before the frame alists are used,
+and applied explicitly by `neo/apply-restored-frame-geometry' as a safety net
+for toolkit builds that ignore restored geometry at frame creation.")
+
+(defun neo--frame-dimension-too-small-p (entry min-px min-chars)
+  "Return non-nil when frame-alist ENTRY describes an implausibly small size.
+ENTRY is a (width . V) or (height . V) cons.  Handles a plain character
+count and the (text-pixels . PX) form written by
+`neo/save-initial-frame-properties'."
+  (when entry
+    (let ((v (cdr entry)))
+      (cond
+       ((and (consp v) (eq (car v) 'text-pixels)) (< (cdr v) min-px))
+       ((integerp v) (< v min-chars))
+       (t nil)))))
+
+(defun neo--frame-alist-ensure-size (alist-sym)
+  "Guarantee ALIST-SYM has a decent, splittable width and height.
+Missing dimensions get char-based defaults; implausibly small restored
+dimensions are replaced by them.  Return non-nil if anything was repaired."
+  (let ((alist (symbol-value alist-sym))
+        (repaired nil))
+    (dolist (dim '(width height))
+      (let* ((entry (assq dim alist))
+             (default  (if (eq dim 'width) neo/default-frame-width neo/default-frame-height))
+             (min-px   (if (eq dim 'width) neo/minimum-frame-pixel-width neo/minimum-frame-pixel-height))
+             (min-chars (if (eq dim 'width) neo/minimum-frame-cols neo/minimum-frame-rows)))
+        (cond
+         ((null entry)
+          (setq alist (cons (cons dim default) alist) repaired t))
+         ((neo--frame-dimension-too-small-p entry min-px min-chars)
+          (setcdr entry default)
+          (setq repaired t)))))
+    (set alist-sym alist)
+    repaired))
+
+(defun neo/ensure-frame-size-floor ()
+  "Ensure NEO frames come up at a sane, splittable size.
+Floors both `initial-frame-alist' and `default-frame-alist', captures the
+restored geometry into `neo--restored-frame-geometry', and mirrors the
+restored SIZE into `default-frame-alist'.
+
+The mirror matters: on this toolkit build the initial frame is created from
+`default-frame-alist' and the geometry restored into `initial-frame-alist' is
+ignored, so the size must live in default-frame-alist too.  Position is NOT
+copied there (that would stack every new frame at one spot); it is left to the
+window manager, which also stops the saved position from drifting."
+  (neo--frame-alist-ensure-size 'initial-frame-alist)
+  ;; Never restore POSITION: on a reparenting window manager the set/report
+  ;; round-trip drifts, so a restored position makes the frame "walk" across
+  ;; launches.  Drop any saved left/top (also from older files) so the window
+  ;; manager places the frame.
+  (setq initial-frame-alist
+        (assq-delete-all 'left (assq-delete-all 'top initial-frame-alist)))
+  (setq neo--restored-frame-geometry
+        (seq-filter (lambda (cell) (memq (car-safe cell) '(width height)))
+                    initial-frame-alist))
+  (let ((w (assq 'width initial-frame-alist))
+        (h (assq 'height initial-frame-alist)))
+    (when w (setf (alist-get 'width default-frame-alist) (cdr w)))
+    (when h (setf (alist-get 'height default-frame-alist) (cdr h))))
+  (neo--frame-alist-ensure-size 'default-frame-alist))
+
 (provide 'neo-early-init-utils)

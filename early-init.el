@@ -76,6 +76,18 @@ This variable is used by `neo/paraphenalia` to determine visibility of UI compon
 
 (neo/load-config-file "initial-frame-properties.el" t)
 
+;; Guarantee a decent, splittable frame size regardless of what (if anything)
+;; was restored above: fresh instances have no saved geometry, and a stale
+;; save (e.g. a pop-up/child frame captured at exit, possibly by another
+;; instance) can be far too small to split into windows.
+(neo/ensure-frame-size-floor)
+
+;; NOTE: deliberately do NOT set `frame-inhibit-implied-resize'.  On this
+;; Emacs/GTK3 build the initial frame is intermittently created collapsed to
+;; ~200x200px; inhibiting implied resizes only risks keeping that broken frame
+;; from being corrected.  The collapse is repaired explicitly in neo-ui-frame.el
+;; (`neo/apply-restored-frame-geometry', with retry timers).
+
 
 ;; TODO when no existing config is found, we would like to show a
 ;; pristine Emacs splash screen.  Unfortunately in those conditions
