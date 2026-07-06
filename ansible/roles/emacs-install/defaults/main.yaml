@@ -3,7 +3,9 @@
 
 requested_emacs_version: ""
 
-# How many date-stamped daily "master" builds to keep under ~/.local.
-# Older ones (emacs-master-YYYY-MM-DD-*) are pruned after a run. The
-# undated legacy build (emacs-master-<suffix>) is never touched.
+# How many days of date-stamped daily "master" builds to keep under
+# ~/.local, regardless of how many variants (e.g. -lucid, -gtk3) were built
+# on a given day. Older days (emacs-master-YYYY-MM-DD-*) are pruned after a
+# run, all their variants together. The undated legacy build
+# (emacs-master-<suffix>) is never touched.
 emacs_keep_daily_builds: 3
