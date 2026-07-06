@@ -1,0 +1,31 @@
+# Ansible config
+
+The `vars/main.yaml` entry (role `emacs-install`) that drove this build
+(`{{ emacs_target_dir }}`), with the ansible-only `fullname` annotation
+removed:
+
+```yaml
+{{ emacs_ansible_config | to_nice_yaml(indent=2, sort_keys=False) }}
+```
+
+# Autoconf details
+
+Output of `./configure` run in `{{ emacs_build_dir }}`:
+
+```
+{{ configure_result.cmd }}
+```
+
+Exit code: `{{ configure_result.rc }}`
+
+## stdout
+
+```
+{{ configure_result.stdout }}
+```
+
+## stderr
+
+```
+{{ configure_result.stderr }}
+```
