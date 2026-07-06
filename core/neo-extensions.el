@@ -33,6 +33,7 @@
   provides
   requires
   depends-on
+  tree-sitter-grammars   ;; list of (LANG URL &optional REVISION SOURCE-DIR CC C++)
   repository
   ;; internal runtime state
   summary-overlay  ;; used in summary view only
@@ -304,6 +305,15 @@ Args:
 - :categories (LIST of symbols)
 - :keywords (LIST of symbols)
 - :requires (LIST of symbols or a single symbol)
+- :tree-sitter-grammars (LIST of tuples, or a single tuple)
+  Each tuple has the same shape as an entry in Emacs's own
+  `treesit-language-source-alist': (LANG URL &optional REVISION
+  SOURCE-DIR CC C++), where LANG MUST be an unquoted symbol (e.g.
+  `haskell', not \"haskell\").  This is the opposite convention from
+  :requires/:depends-on, whose values are publisher:name string
+  slugs — do not confuse the two: a string here will not match
+  anything in `treesit-language-source-alist' and will silently fail
+  to register a grammar.
 - :repository (plist with :type, :url, :path)
 
 This macro relies on two dynamic variables being bound:
@@ -328,6 +338,17 @@ This macro relies on two dynamic variables being bound:
 	 (require-list (if (listp requires) requires (list requires)))
 	 (provide-list (if (listp provides) provides (list provides)))
 	 (depend-list (if (listp depends-on) depends-on (list depends-on)))
+	 ;; Unlike :requires/:depends-on (whose single-value case is a bare
+	 ;; string), a single grammar tuple is itself a list, e.g. (haskell
+	 ;; "URL" "v0.23.1"). So "one tuple" vs "list of tuples" is
+	 ;; distinguished by checking whether the first element is itself a
+	 ;; list (i.e. we were handed a list of tuples, not a single tuple).
+	 (grammars-raw (plist-get args :tree-sitter-grammars))
+	 (grammar-list (cond
+			((null grammars-raw) nil)
+			((and (listp grammars-raw) (not (listp (car grammars-raw))))
+			 (list grammars-raw))
+			(t grammars-raw)))
 	 (repo-raw (plist-get args :repository))
 	 (repo (make-neo/repository
 		:type (plist-get repo-raw :type)
@@ -344,6 +365,7 @@ This macro relies on two dynamic variables being bound:
 		     :requires require-list
 		     :provides provide-list
 		     :depends-on depend-list
+		     :tree-sitter-grammars grammar-list
 		     :repository repo
 		     :summary-overlay nil))
 	 (slug (neo--extension-slug extension)))

@@ -9,6 +9,15 @@
 
 (require 'neo-extensions)
 
+;; `neo/extension' reads `neo--extensions-emblem-path' as part of its
+;; own macro-expansion-time code (not its expanded output), so unlike
+;; `neo--extensions' (already defvar'd with a default in
+;; neo-extensions.el), this variable needs a top-level default here
+;; too: eager macro-expansion of a test body reaches the nested
+;; `neo/extension' call before the test's own `let' has run, so a
+;; per-test `let' binding alone comes too late to satisfy it.
+(defvar neo--extensions-emblem-path "/nonexistent")
+
 (ert-deftest neo/use-local-extension-sources-p-requires-named-instance ()
   "Only non-default checkout instances should use local extension sources."
   (let ((user-emacs-directory (make-temp-file "neo-user-emacs-" t)))
@@ -197,6 +206,49 @@
             (should (equal (file-symlink-p manifest-link)
                            (format "extensions-%s.el" sha)))))
       (delete-directory cache-root t))))
+
+(ert-deftest neo/extension-tree-sitter-grammars-normalizes-single-tuple ()
+  "A single (LANG URL ...) tuple is wrapped into a one-element list.
+Unlike `:requires', whose single-value case is a bare string, a
+single grammar tuple is itself a list, so the macro must distinguish
+it from a list of tuples by checking whether the first element is a
+list."
+  (let ((neo--extensions (make-hash-table :test 'equal))
+        (neo--extensions-emblem-path "/nonexistent"))
+    (neo/extension
+     :name "single-grammar"
+     :publisher "neo"
+     :description "d"
+     :tree-sitter-grammars (haskell "https://example.invalid/haskell" "v0.23.1"))
+    (should (equal (neo/extension-tree-sitter-grammars
+                    (gethash "neo:single-grammar" neo--extensions))
+                   '((haskell "https://example.invalid/haskell" "v0.23.1"))))))
+
+(ert-deftest neo/extension-tree-sitter-grammars-keeps-tuple-list ()
+  "A list of tuples is stored as-is (no double-wrapping)."
+  (let ((neo--extensions (make-hash-table :test 'equal))
+        (neo--extensions-emblem-path "/nonexistent"))
+    (neo/extension
+     :name "many-grammars"
+     :publisher "neo"
+     :description "d"
+     :tree-sitter-grammars ((bash "https://example.invalid/bash")
+                            (c "https://example.invalid/c")))
+    (should (equal (neo/extension-tree-sitter-grammars
+                    (gethash "neo:many-grammars" neo--extensions))
+                   '((bash "https://example.invalid/bash")
+                     (c "https://example.invalid/c"))))))
+
+(ert-deftest neo/extension-tree-sitter-grammars-defaults-to-nil ()
+  "Extensions that declare no grammars get a nil slot, not an error."
+  (let ((neo--extensions (make-hash-table :test 'equal))
+        (neo--extensions-emblem-path "/nonexistent"))
+    (neo/extension
+     :name "no-grammars"
+     :publisher "neo"
+     :description "d")
+    (should-not (neo/extension-tree-sitter-grammars
+                 (gethash "neo:no-grammars" neo--extensions)))))
 
 (provide 'neo-extensions-test)
 ;;; neo-extensions-test.el ends here
