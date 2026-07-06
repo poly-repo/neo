@@ -10,22 +10,6 @@ removed:
 
 # Autoconf details
 
-Output of `./configure` run in `{{ emacs_build_dir }}`:
-
 ```
-{{ configure_result.cmd }}
-```
-
-Exit code: `{{ configure_result.rc }}`
-
-## stdout
-
-```
-{{ configure_result.stdout }}
-```
-
-## stderr
-
-```
-{{ configure_result.stderr }}
+{{ configure_summary.stdout }}
 ```

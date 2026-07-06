@@ -65,9 +65,11 @@ need passwordless sudo.
 
 Each install directory also gets a =neo/buildinfo.md= file (a peer of
 =bin/=) recording the =vars/main.yaml= entry that drove that specific
-build/variant, plus the full stdout/stderr of the =./configure= run, for
-later debugging or auditing which flags and tree-sitter version a given
-install was built with.
+build/variant, plus a trimmed =./configure= summary annotated with the
+detected version of each linked library (via
+=scripts/summarize-configure=), for later debugging or auditing which
+flags, libraries, and tree-sitter version a given install was built
+with.
 
 ** License
 

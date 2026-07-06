@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+# Ehi Emacs, this is -*- python -*-
+"""Trim Emacs' ./configure stdout down to its summary block and annotate
+detected libraries with their installed version (pkg-config, falling back
+to ldd + dpkg). Kept as an external script (rather than inline Jinja) so
+the detection table is easy to extend without touching the Ansible role.
+"""
+
+import argparse
+import os
+import re
+import subprocess
+
+SUMMARY_START_RE = re.compile(r"^Configured for .*$", re.MULTILINE)
+
+# key -> (regex matching the "Does Emacs use ...? yes" summary line,
+#         candidate pkg-config module names in try-order,
+#         an ldd soname substring for the fallback path)
+LIBRARIES = {
+    "libjpeg": (r"Does Emacs use -ljpeg\?\s+yes", ["libjpeg"], "libjpeg"),
+    "libtiff": (r"Does Emacs use -ltiff\?\s+yes", ["libtiff-4"], "libtiff"),
+    "giflib": (r"Does Emacs use a gif library\?\s+yes", ["libgif"], "libgif"),
+    "libpng": (r"Does Emacs use a png library\?\s+yes", ["libpng16", "libpng"], "libpng"),
+    "librsvg": (r"Does Emacs use -lrsvg-2\?\s+yes", ["librsvg-2.0"], "librsvg"),
+    "libwebp": (r"Does Emacs use -lwebp\?\s+yes", ["libwebp"], "libwebp"),
+    "sqlite3": (r"Does Emacs use -lsqlite3\?\s+yes", ["sqlite3"], "libsqlite3"),
+    "cairo": (r"Does Emacs use cairo\?\s+yes", ["cairo"], "libcairo"),
+    "lcms2": (r"Does Emacs use -llcms2\?\s+yes", ["lcms2"], "liblcms2"),
+    "gpm": (r"Does Emacs use -lgpm\?\s+yes", [], "libgpm"),
+    "dbus": (r"Does Emacs use -ldbus\?\s+yes", ["dbus-1"], "libdbus"),
+    "gnutls": (r"Does Emacs use -lgnutls\?\s+yes", ["gnutls"], "libgnutls"),
+    "libxml2": (r"Does Emacs use -lxml2\?\s+yes", ["libxml-2.0"], "libxml2"),
+    "freetype": (r"Does Emacs use -lfreetype\?\s+yes", ["freetype2"], "libfreetype"),
+    "harfbuzz": (r"Does Emacs use HarfBuzz\?\s+yes", ["harfbuzz"], "libharfbuzz"),
+    "m17n-flt": (r"Does Emacs use -lm17n-flt\?\s+yes", ["m17n-flt"], "libm17n-flt"),
+    "libotf": (r"Does Emacs use -lotf\?\s+yes", ["libotf"], "libotf"),
+    "systemd": (r"Does Emacs use -lsystemd\?\s+yes", ["libsystemd"], "libsystemd"),
+    "gmp": (r"Does Emacs use the GMP library\?\s+yes", ["gmp"], "libgmp"),
+    "zlib": (r"Does Emacs directly use zlib\?\s+yes", ["zlib"], "libz"),
+}
+
+TREE_SITTER_RE = re.compile(r"Does Emacs use -ltree-sitter\?\s+yes")
+
+
+def extract_summary(text):
+    match = SUMMARY_START_RE.search(text)
+    return (text[match.start():] if match else text).rstrip("\n")
+
+
+def pkg_config_version(module):
+    try:
+        result = subprocess.run(
+            ["pkg-config", "--modversion", module],
+            capture_output=True, text=True, check=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def ldd_dpkg_version(binary, soname_fragment):
+    try:
+        ldd_out = subprocess.run(
+            ["ldd", binary], capture_output=True, text=True, check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+    path = None
+    for line in ldd_out.splitlines():
+        if soname_fragment in line and "=>" in line:
+            path = line.split("=>", 1)[1].strip().split(" ")[0]
+            break
+    if not path:
+        return None
+    path = os.path.realpath(path)
+
+    try:
+        dpkg_s = subprocess.run(
+            ["dpkg", "-S", path], capture_output=True, text=True, check=True,
+        )
+        package = dpkg_s.stdout.split(":", 1)[0]
+        version = subprocess.run(
+            ["dpkg-query", "-W", "-f=${Version}", package],
+            capture_output=True, text=True, check=True,
+        )
+        return version.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def detect_versions(summary, tree_sitter_version, emacs_binary):
+    versions = {}
+
+    if tree_sitter_version and TREE_SITTER_RE.search(summary):
+        versions["tree-sitter"] = tree_sitter_version
+
+    for name, (line_re, modules, soname) in LIBRARIES.items():
+        if not re.search(line_re, summary):
+            continue
+        version = None
+        for module in modules:
+            version = pkg_config_version(module)
+            if version:
+                break
+        if not version and emacs_binary:
+            version = ldd_dpkg_version(emacs_binary, soname)
+        versions[name] = version or "unknown"
+
+    return versions
+
+
+def main(configure_stdout, tree_sitter_version, emacs_binary):
+    with open(configure_stdout) as f:
+        text = f.read()
+
+    summary = extract_summary(text)
+    versions = detect_versions(summary, tree_sitter_version, emacs_binary)
+
+    print(summary)
+    print()
+    print("Library versions:")
+    for name in sorted(versions):
+        print(f"  {name}: {versions[name]}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        prog="summarize-configure",
+        description="Trim Emacs configure output to its summary and annotate library versions",
+    )
+    parser.add_argument(
+        "configure_stdout",
+        help="path to a file containing ./configure's stdout",
+    )
+    parser.add_argument("--tree-sitter-version", default="")
+    parser.add_argument("--emacs-binary", default="")
+    args = parser.parse_args()
+    main(
+        configure_stdout=args.configure_stdout,
+        tree_sitter_version=args.tree_sitter_version,
+        emacs_binary=args.emacs_binary,
+    )
