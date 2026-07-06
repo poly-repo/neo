@@ -3,6 +3,23 @@
 emacs_versions:
   - version: master
     source: git
+    suffix: lucid
+    tree_sitter: 0.26.10
+
+    config:
+      - '--disable-gc-mark-trace'
+      - '--with-rsvg'
+      - '--with-tree-sitter'
+      - '--with-sqlite3'
+      - '--with-x-toolkit=lucid'
+      - '--with-gif'
+      - '--with-png'
+      - '--with-jpeg'
+      - '--with-rsvg'
+      - '--with-tiff'
+
+  - version: master
+    source: git
     suffix: gtk3
     tree_sitter: 0.26.10
 
