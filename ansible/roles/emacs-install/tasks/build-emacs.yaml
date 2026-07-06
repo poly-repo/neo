@@ -298,6 +298,30 @@
         remote_src: yes
         mode: preserve
       become: true
+    - name: Write raw configure stdout to a temporary file
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .configure-stdout
+      register: configure_stdout_file
+    - name: Save configure stdout for post-processing
+      ansible.builtin.copy:
+        content: "{{ configure_result.stdout }}"
+        dest: "{{ configure_stdout_file.path }}"
+    - name: Summarize configure output and detect library versions
+      ansible.builtin.command:
+        cmd: >-
+          {{ role_path }}/scripts/summarize-configure
+          {{ configure_stdout_file.path }}
+          --tree-sitter-version {{ tree_sitter_version }}
+          --emacs-binary {{ emacs_target_dir }}/bin/emacs
+      environment:
+        PKG_CONFIG_PATH: "{{ tree_sitter_prefix }}/lib/pkgconfig"
+      register: configure_summary
+      changed_when: false
+    - name: Remove temporary configure stdout file
+      ansible.builtin.file:
+        path: "{{ configure_stdout_file.path }}"
+        state: absent
     - name: Create neo directory for build metadata
       ansible.builtin.file:
         path: "{{ emacs_target_dir }}/neo"
