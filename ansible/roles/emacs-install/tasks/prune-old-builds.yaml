@@ -1,9 +1,12 @@
 ---
-# Keep only the newest `emacs_keep_daily_builds` date-stamped daily master
-# builds under ~/.local; delete the older ones. Build directories are named
-# emacs-master-YYYY-MM-DD[-suffix] (see build-emacs.yaml), so a lexical sort is
-# chronological. The undated legacy directory (emacs-master-<suffix>) does not
-# match the pattern and is left alone.
+# Keep only the newest `emacs_keep_daily_builds` *days* of date-stamped daily
+# master builds under ~/.local; delete the rest. Build directories are named
+# emacs-master-YYYY-MM-DD[-suffix] (see build-emacs.yaml), and a single day can
+# now produce more than one variant (e.g. -lucid and -gtk3). Retention is
+# therefore computed over distinct dates, not directory count, so keeping N
+# days always keeps every variant built on those days. The undated legacy
+# directory (emacs-master-<suffix>) does not match the pattern and is left
+# alone.
 
 - name: Find date-stamped daily master Emacs builds
   ansible.builtin.find:
@@ -13,22 +16,38 @@
     recurse: false
   register: daily_master_builds
 
-- name: Compute which daily master builds to prune
+- name: Pair each build directory with its embedded date
   set_fact:
-    # Oldest first, then drop all but the newest N.
-    emacs_daily_builds_sorted: "{{ daily_master_builds.files | map(attribute='path') | sort | list }}"
-    emacs_daily_builds_prune_count: "{{ [(daily_master_builds.files | length) - (emacs_keep_daily_builds | int), 0] | max }}"
+    emacs_daily_builds_by_date: "{{ emacs_daily_builds_by_date | default([]) + [{'path': item, 'date': item | basename | regex_replace('^emacs-master-([0-9]{4}-[0-9]{2}-[0-9]{2})(-.*)?$', '\\1')}] }}"
+  loop: "{{ daily_master_builds.files | map(attribute='path') | list }}"
+  loop_control:
+    label: "{{ item | basename }}"
 
-- name: Select the oldest daily master builds for removal
+- name: Compute distinct build dates, oldest first
   set_fact:
-    emacs_daily_builds_to_remove: "{{ emacs_daily_builds_sorted[:emacs_daily_builds_prune_count | int] }}"
+    emacs_daily_build_dates_sorted: "{{ emacs_daily_builds_by_date | map(attribute='date') | unique | sort | list }}"
+
+- name: Compute which daily master build dates to prune
+  set_fact:
+    # Oldest first, then drop all but the newest N dates.
+    emacs_daily_dates_prune_count: "{{ [(emacs_daily_build_dates_sorted | length) - (emacs_keep_daily_builds | int), 0] | max }}"
+
+- name: Select the oldest daily master build dates for removal
+  set_fact:
+    emacs_daily_dates_to_remove: "{{ emacs_daily_build_dates_sorted[:emacs_daily_dates_prune_count | int] }}"
+
+- name: Select every build directory (any variant) for the pruned dates
+  set_fact:
+    emacs_daily_builds_to_remove: "{{ emacs_daily_builds_by_date | selectattr('date', 'in', emacs_daily_dates_to_remove) | map(attribute='path') | list }}"
 
 - name: Report daily master build retention
   ansible.builtin.debug:
     msg: >-
-      Found {{ daily_master_builds.files | length }} daily master build(s);
-      keeping newest {{ emacs_keep_daily_builds }},
-      removing {{ emacs_daily_builds_to_remove | length }}:
+      Found {{ daily_master_builds.files | length }} daily master build(s)
+      across {{ emacs_daily_build_dates_sorted | length }} day(s);
+      keeping newest {{ emacs_keep_daily_builds }} day(s),
+      removing {{ emacs_daily_builds_to_remove | length }} build(s)
+      from {{ emacs_daily_dates_to_remove | length }} day(s):
       {{ emacs_daily_builds_to_remove | map('basename') | list }}
 
 # Build directories are installed with `become` (make install / src copy run as
