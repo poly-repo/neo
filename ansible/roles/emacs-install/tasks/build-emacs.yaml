@@ -9,6 +9,10 @@
     suffix: '{{item.suffix|default("")}}'
     tree_sitter_version: '{{item.tree_sitter|default("")}}'
 
+- name: Snapshot the Ansible config entry for this build
+  set_fact:
+    emacs_ansible_config: "{{ item | dict2items | rejectattr('key', 'equalto', 'fullname') | items2dict }}"
+
 - name: Print tree-sitter version
   debug:
     msg: "Tree-sitter version: {{ tree_sitter_version }}"
@@ -272,6 +276,7 @@
         CPPFLAGS: "{{ tree_sitter_cflags }}"
         LDFLAGS: "{{ tree_sitter_ldflags }}"
         PKG_CONFIG_PATH: "{{ tree_sitter_prefix }}/lib/pkgconfig"
+      register: configure_result
 
     - name: Bootstrap
       ansible.builtin.command:
@@ -292,7 +297,19 @@
         dest: "{{ emacs_target_dir }}"
         remote_src: yes
         mode: preserve
-      become: true      
+      become: true
+    - name: Create neo directory for build metadata
+      ansible.builtin.file:
+        path: "{{ emacs_target_dir }}/neo"
+        state: directory
+        mode: '0755'
+      become: true
+    - name: Write build info to neo/buildinfo.md
+      ansible.builtin.template:
+        src: buildinfo.md.j2
+        dest: "{{ emacs_target_dir }}/neo/buildinfo.md"
+        mode: '0644'
+      become: true
     - name: remove directory
       ansible.builtin.file:
         path: "{{source_dir.path}}"
