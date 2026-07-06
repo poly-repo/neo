@@ -11,8 +11,11 @@
 # Install everything:
 # ansible-playbook infra/ansible/playbooks/omega-developer/omega-developer.yaml
 #
-# Install only one configured Emacs version by name:
-# ansible-playbook infra/ansible/playbooks/emacs/emacs.yaml -e emacs_version_name=master
+# Install only the configured Emacs builds matching a name:
+#   - a bare version builds every matching variant:
+#     ansible-playbook infra/ansible/playbooks/emacs/emacs.yaml -e emacs_version_name=master
+#   - a version-suffix name builds just that one variant:
+#     ansible-playbook infra/ansible/playbooks/emacs/emacs.yaml -e emacs_version_name=master-lucid
 #
 # Install only a specific tag:
 # ansible-playbook infra/ansible/playbooks/omega-developer/omega-developer.yaml --tags llm
