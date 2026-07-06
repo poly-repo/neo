@@ -11,8 +11,11 @@ package is required.
 
 ** Role Variables
 
-- =requested_emacs_version= (default ="="): build only the matching entry
-  from =emacs_versions=; empty builds them all.
+- =requested_emacs_version= (default ="="): build only the matching entries
+  from =emacs_versions=; empty builds them all. A bare version (e.g. =master=)
+  selects every variant with that version; a =version-suffix= name (e.g.
+  =master-lucid=, =30.2-gtk3=) selects just that one variant. Set it on the
+  command line via =-e emacs_version_name==.
 - =emacs_versions= (vars/main.yaml): the list of Emacs builds (master + the
   configured releases) with their =configure= flags and tree-sitter version.
 - =emacs_keep_daily_builds= (default =3=): how many date-stamped daily

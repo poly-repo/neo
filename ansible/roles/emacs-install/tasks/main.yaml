@@ -17,13 +17,30 @@
     vterm_install_dir: "{{ vterm_xdg_data_home }}/emacs/site-lisp/vterm"
     vterm_use_system_libvterm: false
 
+# Annotate each entry with a selectable full name: the bare version, plus the
+# suffix when present (e.g. master -> master-lucid). This lets a request match
+# either a whole version group (master -> all master variants) or a single
+# variant (master-lucid), without parsing the requested string — so a
+# dash-bearing version like 30.2-rc1 is never mis-split into version+suffix.
+- name: Annotate Emacs versions with a selectable full name
+  set_fact:
+    emacs_versions_annotated: "{{ emacs_versions_annotated | default([])
+      + [ item | combine({'fullname': item.version
+          ~ ('-' ~ item.suffix if (item.suffix | default('')) | length > 0 else '')}) ] }}"
+  loop: "{{ emacs_versions }}"
+  loop_control:
+    label: "{{ item.version }}"
+
 - name: Select Emacs versions to install
   set_fact:
     emacs_versions_to_install: >-
       {{
-        emacs_versions
+        emacs_versions_annotated
         if (requested_emacs_version | default('') | length == 0)
-        else (emacs_versions | selectattr('version', 'equalto', requested_emacs_version) | list)
+        else (
+          (emacs_versions_annotated | selectattr('version', 'equalto', requested_emacs_version) | list)
+          | union(emacs_versions_annotated | selectattr('fullname', 'equalto', requested_emacs_version) | list)
+        )
       }}
 
 - name: Validate requested Emacs version
@@ -32,7 +49,7 @@
       - emacs_versions_to_install | length > 0
     fail_msg: >-
       Emacs version '{{ requested_emacs_version }}' is not defined in emacs_versions.
-      Available version values: {{ emacs_versions | map(attribute='version') | unique | join(', ') }}
+      Available names: {{ emacs_versions_annotated | map(attribute='fullname') | unique | join(', ') }}
   when: requested_emacs_version | default('') | length > 0
 
 - name: Install Emacs
