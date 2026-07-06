@@ -200,8 +200,8 @@
     src: neo_git_info.patch.j2
     dest: "{{ temp_file.path }}"
   vars:
-    git_commit_date: "{{ git_commit_date.stdout }}"
-    git_commit_hash: "{{ git_commit_hash.stdout }}"
+    emacs_commit_date: "{{ git_commit_date.stdout }}"
+    emacs_commit_sha: "{{ git_commit_hash.stdout }}"
   when: temp_file.path is defined and source == 'git'
 
 - name: Expand template to the temporary file
@@ -209,8 +209,8 @@
     src: neo_git_info.patch.j2
     dest: "{{ temp_file.path }}"
   vars:
-    git_commit_date: "<release>"
-    git_commit_hash: "<release>"
+    emacs_commit_date: "<release>"
+    emacs_commit_sha: "<release>"
   when: temp_file.path is defined and source != 'git'
 
 - name: Display the path of the temporary file
