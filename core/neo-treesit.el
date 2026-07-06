@@ -11,6 +11,16 @@
 (require 'neo-framework)
 (require 'treesit)
 
+;; Emacs >=31 asks for confirmation (`treesit-auto-install-grammar'
+;; defaults to `ask') before building a grammar the moment some
+;; ts-mode needs it, independently of the auto-install below. That
+;; race (a ts-mode buffer opening before our idle timer fires) is
+;; exactly the "still waits for confirmation" case we're trying to
+;; eliminate, so tell Emacs's own fallback to just build it instead of
+;; asking. Harmless no-op on older Emacs, which lacks this variable.
+(with-no-warnings
+  (setq treesit-auto-install-grammar 'always))
+
 (defun neo--treesit-buildinfo-path ()
   "Return the path to neo/buildinfo.md for this Emacs install, or nil.
 The file is written by the ansible emacs-install role and lives next
