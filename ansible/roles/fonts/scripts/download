@@ -86,22 +86,76 @@ styles = {
     900: 'Black',
 }
 
-def google_download_variant(family, weight, variant, url, font_dir):
+# Named instances of the "Recursive" variable font (MONO/CASL axes), keyed by
+# the word used to request them. Google's css2 API only recognizes the base
+# "Recursive" family -- "Recursive Mono Casual" et al. are axis positions
+# within it, not family names it accepts via `family=`, so translate the
+# words after "Recursive" into pinned axis values instead.
+RECURSIVE_AXIS_TOKENS = {
+    'sans': ('MONO', '0'),
+    'mono': ('MONO', '1'),
+    'linear': ('CASL', '0'),
+    'casual': ('CASL', '1'),
+}
+
+def recursive_axis_pins(family):
+    """Return {'MONO': ..., 'CASL': ...} for a compound 'Recursive ...' name, else None."""
+    words = family.split()
+    if len(words) < 2 or words[0] != 'Recursive':
+        return None
+    axes = {'MONO': '0', 'CASL': '0'}
+    for word in words[1:]:
+        axis, value = RECURSIVE_AXIS_TOKENS.get(word.lower(), (None, None))
+        if axis is None:
+            return None
+        axes[axis] = value
+    return axes
+
+def rename_font_family(path, family, style):
+    """Rewrite PATH's name table so fontconfig sees FAMILY/STYLE.
+
+    Needed for Recursive named instances: the file downloaded from Google
+    is internally named after Google's own instance (e.g. "Recursive
+    Monospace Casual"), which doesn't match the family name we requested
+    (e.g. "Recursive Mono Casual"), so it wouldn't be found under that name.
+    """
+    from fontTools.ttLib import TTFont
+    font = TTFont(path)
+    name_table = font['name']
+    full_name = family if style == 'Regular' else f'{family} {style}'
+    replacements = {1: family, 2: style, 4: full_name, 6: full_name.replace(' ', ''), 16: family, 17: style}
+    for record in list(name_table.names):
+        if record.nameID in replacements:
+            name_table.setName(replacements[record.nameID], record.nameID,
+                                record.platformID, record.platEncID, record.langID)
+    font.save(path)
+
+def google_download_variant(family, weight, variant, url, font_dir, rename_to=None):
     print(f"Downloading {family}-{variant} [weight: {weight}] from {url}")
     path = urlparse(url).path
     ext = splitext(path)[1]
-    response = wget.download(url=url, out=os.path.join(font_dir, f"{family}-{variant}{ext}"),bar=None)
+    out_path = os.path.join(font_dir, f"{family}-{variant}{ext}")
+    response = wget.download(url=url, out=out_path, bar=None)
     print(response)
+    if rename_to:
+        rename_font_family(out_path, rename_to, variant)
 
 def google_download_family(family, font_dir):
     base_url = 'https://fonts.googleapis.com/css2'
-    weights = '100;200;300;400;500;600;700;800;900'
-    url = f'{base_url}?family={family}:wght@{weights}&display=swap'
+    weight_values = (100, 200, 300, 400, 500, 600, 700, 800, 900)
+    axes = recursive_axis_pins(family)
+    if axes:
+        axis_tags = ','.join(list(axes.keys()) + ['wght'])
+        pins = ';'.join(f"{axes['MONO']},{axes['CASL']},{w}" for w in weight_values)
+        url = f'{base_url}?family=Recursive:{axis_tags}@{pins}&display=swap'
+    else:
+        weights = ';'.join(str(w) for w in weight_values)
+        url = f'{base_url}?family={family}:wght@{weights}&display=swap'
     r = requests.get(url, allow_redirects=True)
 
     weight_re = re.compile("^\s*font-weight:\s*(?P<weight>[0-9]+);.*$")
     url_re = re.compile("^\s*src: url\((?P<url>[^)]+)\).*$")
-    
+
     variant_weight = None
     variant_url = None
     for l in r.content.decode().split('\n'):
@@ -113,10 +167,11 @@ def google_download_family(family, font_dir):
             variant_url = m.group('url')
 
         if variant_weight and variant_url:
-            google_download_variant(family, variant_weight, styles[int(variant_weight)], variant_url, font_dir)
+            google_download_variant(family, variant_weight, styles[int(variant_weight)], variant_url, font_dir,
+                                     rename_to=family if axes else None)
             variant_weight = None
             variant_url = None
-    
+
 def main(family_and_source, base_dir):
     family, source = family_and_source.split(':')
 
