@@ -34,6 +34,7 @@
   requires
   depends-on
   tree-sitter-grammars   ;; list of (LANG URL &optional REVISION SOURCE-DIR CC C++)
+  tree-sitter-modes      ;; list of (LANG CLASSIC-MODE TS-MODE)
   repository
   ;; internal runtime state
   summary-overlay  ;; used in summary view only
@@ -314,6 +315,13 @@ Args:
   slugs — do not confuse the two: a string here will not match
   anything in `treesit-language-source-alist' and will silently fail
   to register a grammar.
+- :tree-sitter-modes (LIST of tuples, or a single tuple)
+  Each tuple is (LANG CLASSIC-MODE TS-MODE), e.g. (haskell
+  haskell-mode haskell-ts-mode), all unquoted symbols. Declares that
+  once LANG's grammar (see :tree-sitter-grammars) is ready,
+  `core/neo-treesit.el' should prefer TS-MODE over CLASSIC-MODE via
+  `major-mode-remap-alist'. Uses the same single-tuple-vs-list-of-
+  tuples normalization as :tree-sitter-grammars.
 - :repository (plist with :type, :url, :path)
 
 This macro relies on two dynamic variables being bound:
@@ -349,6 +357,16 @@ This macro relies on two dynamic variables being bound:
 			((and (listp grammars-raw) (not (listp (car grammars-raw))))
 			 (list grammars-raw))
 			(t grammars-raw)))
+	 ;; Same tuple-vs-list-of-tuples convention as :tree-sitter-grammars
+	 ;; above: a single (LANG CLASSIC-MODE TS-MODE) tuple's car is a
+	 ;; symbol, not a list, so that's how we tell it apart from a list
+	 ;; of tuples.
+	 (modes-raw (plist-get args :tree-sitter-modes))
+	 (mode-list (cond
+		     ((null modes-raw) nil)
+		     ((and (listp modes-raw) (not (listp (car modes-raw))))
+		      (list modes-raw))
+		     (t modes-raw)))
 	 (repo-raw (plist-get args :repository))
 	 (repo (make-neo/repository
 		:type (plist-get repo-raw :type)
@@ -366,6 +384,7 @@ This macro relies on two dynamic variables being bound:
 		     :provides provide-list
 		     :depends-on depend-list
 		     :tree-sitter-grammars grammar-list
+		     :tree-sitter-modes mode-list
 		     :repository repo
 		     :summary-overlay nil))
 	 (slug (neo--extension-slug extension)))
