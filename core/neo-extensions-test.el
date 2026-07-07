@@ -18,6 +18,13 @@
 ;; per-test `let' binding alone comes too late to satisfy it.
 (defvar neo--extensions-emblem-path "/nonexistent")
 
+(defconst neo-extensions-test--this-directory
+  (file-name-directory (or load-file-name buffer-file-name))
+  "Directory this test file lives in.
+Captured at top level (load time) rather than inside a test body,
+since `load-file-name' is only bound while this file is being loaded
+— by the time ERT runs an individual test, it is back to nil.")
+
 (ert-deftest neo/use-local-extension-sources-p-requires-named-instance ()
   "Only non-default checkout instances should use local extension sources."
   (let ((user-emacs-directory (make-temp-file "neo-user-emacs-" t)))
@@ -249,6 +256,62 @@ list."
      :description "d")
     (should-not (neo/extension-tree-sitter-grammars
                  (gethash "neo:no-grammars" neo--extensions)))))
+
+(ert-deftest neo/extension-tree-sitter-modes-normalizes-single-tuple ()
+  "A single (LANG CLASSIC-MODE TS-MODE) tuple is wrapped into a
+one-element list, mirroring `:tree-sitter-grammars' normalization."
+  (let ((neo--extensions (make-hash-table :test 'equal))
+        (neo--extensions-emblem-path "/nonexistent"))
+    (neo/extension
+     :name "single-mode"
+     :publisher "neo"
+     :description "d"
+     :tree-sitter-modes (haskell haskell-mode haskell-ts-mode))
+    (should (equal (neo/extension-tree-sitter-modes
+                    (gethash "neo:single-mode" neo--extensions))
+                   '((haskell haskell-mode haskell-ts-mode))))))
+
+(ert-deftest neo/extension-tree-sitter-modes-keeps-tuple-list ()
+  "A list of tuples is stored as-is (no double-wrapping)."
+  (let ((neo--extensions (make-hash-table :test 'equal))
+        (neo--extensions-emblem-path "/nonexistent"))
+    (neo/extension
+     :name "many-modes"
+     :publisher "neo"
+     :description "d"
+     :tree-sitter-modes ((haskell haskell-mode haskell-ts-mode)
+                         (python python-mode python-ts-mode)))
+    (should (equal (neo/extension-tree-sitter-modes
+                    (gethash "neo:many-modes" neo--extensions))
+                   '((haskell haskell-mode haskell-ts-mode)
+                     (python python-mode python-ts-mode))))))
+
+(ert-deftest neo/extension-tree-sitter-modes-defaults-to-nil ()
+  "Extensions that declare no mode preferences get a nil slot, not an
+error."
+  (let ((neo--extensions (make-hash-table :test 'equal))
+        (neo--extensions-emblem-path "/nonexistent"))
+    (neo/extension
+     :name "no-modes"
+     :publisher "neo"
+     :description "d")
+    (should-not (neo/extension-tree-sitter-modes
+                 (gethash "neo:no-modes" neo--extensions)))))
+
+(ert-deftest neo/extension-tree-sitter-modes-loads-from-real-haskell-manifest ()
+  "The real Haskell manifest.el's :tree-sitter-modes tuple survives
+macro-expansion, guarding against tuple-shape drift between this
+suite's synthetic structs and the actual declaration."
+  (let ((neo--extensions (make-hash-table :test 'equal))
+        (neo--extensions-emblem-path "/nonexistent")
+        (manifest-path
+         (expand-file-name
+          "../extensions/extensions/neo/haskell/manifest.el"
+          neo-extensions-test--this-directory)))
+    (load manifest-path nil 'nomessage)
+    (should (equal (neo/extension-tree-sitter-modes
+                    (gethash "neo:haskell" neo--extensions))
+                   '((haskell haskell-mode haskell-ts-mode))))))
 
 (provide 'neo-extensions-test)
 ;;; neo-extensions-test.el ends here
