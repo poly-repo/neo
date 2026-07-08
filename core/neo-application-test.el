@@ -105,6 +105,57 @@
     ;; it rather than jumping straight back to Default.
     (expect neo--application-perspective-stack :to-equal '("App:App1" "Default")))
 
+  (it "does nothing when already in the application and it is genuinely alive"
+    (let ((setup-count 0))
+      (neo/application "AliveApp"
+        :setup (progn
+                 (cl-incf setup-count)
+                 (switch-to-buffer (get-buffer-create "*AliveApp*"))))
+      (setq persp-curr-name "Default")
+      (setq neo--application-perspective-stack nil)
+      (delete-other-windows)
+
+      (neo/app-aliveapp)
+      (expect setup-count :to-equal 1)
+      (expect neo--application-perspective-stack :to-equal '("Default"))
+
+      (spy-on 'persp-switch :and-call-through)
+      (spy-on 'message)
+      (neo/app-aliveapp)
+
+      (expect setup-count :to-equal 1)
+      (expect 'persp-switch :not :to-have-been-called)
+      (expect neo--application-perspective-stack :to-equal '("Default"))
+      (expect 'message :to-have-been-called-with "Already in application %s" "AliveApp")))
+
+  (it "recovers when the application perspective is current but its buffer was killed"
+    (let ((setup-count 0))
+      (neo/application "DeadApp"
+        :setup (progn
+                 (cl-incf setup-count)
+                 (switch-to-buffer (get-buffer-create "*DeadApp*"))))
+      (setq persp-curr-name "Default")
+      (setq neo--application-perspective-stack nil)
+      (delete-other-windows)
+
+      (neo/app-deadapp)
+      (expect setup-count :to-equal 1)
+      (expect persp-curr-name :to-equal "App:DeadApp")
+
+      ;; Simulate the bug: the app buffer dies (as `neo/dashboard-quit' does)
+      ;; while `persp-current-name' stays "App:DeadApp" -- neo-application-mode
+      ;; is buffer-local so it dies with the buffer.
+      (kill-buffer "*DeadApp*")
+      (switch-to-buffer (get-buffer-create "*scratch* (App:DeadApp)"))
+
+      (spy-on 'persp-switch :and-call-through)
+      (neo/app-deadapp)
+
+      (expect setup-count :to-equal 2)
+      (expect (get-buffer "*DeadApp*") :to-be-truthy)
+      (expect 'persp-switch :not :to-have-been-called)
+      (expect neo--application-perspective-stack :to-equal '("Default"))))
+
   (it "unwinds nested application launches one step at a time"
     (neo/application "Outer" :setup (ignore))
     (neo/application "Inner" :setup (ignore))
