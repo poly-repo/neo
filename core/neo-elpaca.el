@@ -145,6 +145,8 @@ pre-binding must precede the installer block (got %s)" elpaca-directory)
 ;; Block until current queue processed.
 (elpaca-wait)
 
+(require 'neo-elpaca-manager-faces)
+
 (require 'neo-application)
 (neo/application "Elpaca Manager"
   :setup (elpaca-manager)
