@@ -44,8 +44,14 @@ the native quit behavior of the application untouched."
   "Return the sorted list of registered Neo application names."
   (mapcar #'neo/application-name (neo/applications)))
 
-(defvar neo--last-user-perspective nil
-  "The name of the perspective active before entering a Neo application.")
+(defvar neo--application-perspective-stack nil
+  "Stack of perspectives to return to as Neo applications are exited.
+Each `neo/application' entry pushes the perspective it switched away
+from, regardless of whether that perspective is itself another
+application; quitting pops and restores it.  This makes nested
+application launches (e.g. opening one app from within another) return
+to the correct predecessor at each step, rather than only ever being
+able to restore a single remembered \"user\" perspective.")
 
 (defvar neo-application-mode-map
   (let ((map (make-sparse-keymap)))
@@ -145,9 +151,9 @@ Keywords arguments:
          (augmented-teardown
           `(progn
              ,teardown
-             (when (and neo--last-user-perspective
-                        (member neo--last-user-perspective (persp-names)))
-               (persp-switch neo--last-user-perspective)))))
+             (when-let* ((target (pop neo--application-perspective-stack)))
+               (when (member target (persp-names))
+                 (persp-switch target))))))
     `(progn
        (defun ,cmd-name ()
          ,(format "Switch to %s application." name)
@@ -161,9 +167,11 @@ Keywords arguments:
             ((string= current-persp app-persp-name)
              (message "Already in application %s" ,name))
             (t
-             ;; Only update the last user perspective if we are NOT coming from another application
-             (unless (string-prefix-p "App:" current-persp)
-               (setq neo--last-user-perspective current-persp))
+             ;; Always push, even when coming from another application: this
+             ;; is what lets nested launches (e.g. opening Neo Extensions
+             ;; from within the Dashboard) unwind one step at a time instead
+             ;; of only ever restoring a single remembered perspective.
+             (push current-persp neo--application-perspective-stack)
              (persp-switch app-persp-name)
              ,setup
              (neo/application--post-setup-cleanup ,name)

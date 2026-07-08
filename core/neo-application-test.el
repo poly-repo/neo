@@ -14,6 +14,7 @@
 
 (defun persp-switch (name)
   (setq persp-curr-name name)
+  (add-to-list 'persp-names name)
   ;; Ensure scratch buffer exists for new perspective
   (let ((scratch-name (format "*scratch* (App:%s)" (string-remove-prefix "App:" name))))
     (get-buffer-create scratch-name)))
@@ -90,18 +91,40 @@
 
     ;; Start in Default
     (setq persp-curr-name "Default")
-    (setq neo--last-user-perspective nil)
+    (setq neo--application-perspective-stack nil)
 
     ;; Switch to App1
     (neo/app-app1)
     (expect persp-curr-name :to-equal "App:App1")
-    (expect neo--last-user-perspective :to-equal "Default")
+    (expect neo--application-perspective-stack :to-equal '("Default"))
 
     ;; Switch to App2 directly from App1
     (neo/app-app2)
     (expect persp-curr-name :to-equal "App:App2")
-    ;; Should still point to Default, not App:App1
-    (expect neo--last-user-perspective :to-equal "Default"))
+    ;; Nested launch: App1 is pushed too, so quitting App2 can return to
+    ;; it rather than jumping straight back to Default.
+    (expect neo--application-perspective-stack :to-equal '("App:App1" "Default")))
+
+  (it "unwinds nested application launches one step at a time"
+    (neo/application "Outer" :setup (ignore))
+    (neo/application "Inner" :setup (ignore))
+
+    (setq persp-curr-name "Default")
+    (setq neo--application-perspective-stack nil)
+
+    (neo/app-outer)
+    (expect persp-curr-name :to-equal "App:Outer")
+
+    (neo/app-inner)
+    (expect persp-curr-name :to-equal "App:Inner")
+
+    ;; Quitting Inner restores Outer, not Default.
+    (neo/leave-current-application)
+    (expect persp-curr-name :to-equal "App:Outer")
+
+    ;; Quitting Outer restores the original perspective.
+    (neo/leave-current-application)
+    (expect persp-curr-name :to-equal "Default"))
 
   (it "registers default quit keys and honors per-app overrides"
     (neo/application "QuitDefault" :setup (ignore))
@@ -118,7 +141,7 @@
     (neo/application "QuitBuf"
       :setup (switch-to-buffer (get-buffer-create "*QuitBuf*")))
     (setq persp-curr-name "Default")
-    (setq neo--last-user-perspective nil)
+    (setq neo--application-perspective-stack nil)
     (delete-other-windows)
     (neo/app-quitbuf)
     (with-current-buffer "*QuitBuf*"
@@ -136,7 +159,7 @@
       :setup (switch-to-buffer (get-buffer-create "*NoQuitBuf*"))
       :quit-keys nil)
     (setq persp-curr-name "Default")
-    (setq neo--last-user-perspective nil)
+    (setq neo--application-perspective-stack nil)
     (delete-other-windows)
     (neo/app-noquitbuf)
     (with-current-buffer "*NoQuitBuf*"
@@ -150,7 +173,7 @@
     (neo/application "RevertApp"
       :setup (set-window-buffer (selected-window) (get-buffer-create "*RevertApp*")))
     (setq persp-curr-name "Default")
-    (setq neo--last-user-perspective nil)
+    (setq neo--application-perspective-stack nil)
     (delete-other-windows)
     (switch-to-buffer (get-buffer-create "*caller*"))
     (neo/app-revertapp)
