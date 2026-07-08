@@ -90,6 +90,17 @@ APP-NAME is the name of the application (without the 'App:' prefix)."
                   (string= buf-name warnings-buffer-name))
           (ignore-errors (delete-window win)))))))
 
+(defun neo/application--active-in-frame-p ()
+  "Return non-nil when some window in the selected frame shows a buffer
+with `neo-application-mode' enabled.
+Relies on `persp-mode' swapping the frame's entire window configuration
+on `persp-switch', so a buffer from a different (non-current) Neo
+application's perspective is never visible here even though the mode
+itself is not app-specific."
+  (cl-some (lambda (win)
+             (buffer-local-value 'neo-application-mode (window-buffer win)))
+           (window-list)))
+
 (defun neo/leave-current-application ()
   "Leave the current Neo application and run its teardown."
   (interactive)
@@ -161,18 +172,24 @@ Keywords arguments:
          (require 'perspective)
          (unless (bound-and-true-p persp-mode)
            (persp-mode 1))
-         (let ((current-persp (persp-current-name))
-               (app-persp-name (format "App:%s" ,name)))
+         (let* ((current-persp (persp-current-name))
+                (app-persp-name (format "App:%s" ,name))
+                (already-there (string= current-persp app-persp-name)))
            (cond
-            ((string= current-persp app-persp-name)
+            ((and already-there (neo/application--active-in-frame-p))
              (message "Already in application %s" ,name))
             (t
              ;; Always push, even when coming from another application: this
              ;; is what lets nested launches (e.g. opening Neo Extensions
              ;; from within the Dashboard) unwind one step at a time instead
-             ;; of only ever restoring a single remembered perspective.
-             (push current-persp neo--application-perspective-stack)
-             (persp-switch app-persp-name)
+             ;; of only ever restoring a single remembered perspective. Skip
+             ;; it entirely when we're already in the app's own perspective
+             ;; but it's not alive (e.g. its buffer was killed with nothing
+             ;; to restore to on a previous quit) -- we never left, so there
+             ;; is nothing to push or switch to; just re-run setup in place.
+             (unless already-there
+               (push current-persp neo--application-perspective-stack)
+               (persp-switch app-persp-name))
              ,setup
              (neo/application--post-setup-cleanup ,name)
              ;; `setup' may run inside `with-current-buffer' (e.g.
