@@ -36,6 +36,9 @@
   tree-sitter-grammars   ;; list of (LANG URL &optional REVISION SOURCE-DIR CC C++)
   tree-sitter-modes      ;; list of (LANG CLASSIC-MODE TS-MODE)
   repository
+  hidden ;; when non-nil, not user-manageable: omitted from the Extension
+         ;; Manager's card list (e.g. the manager itself, which can't
+         ;; sensibly disable/uninstall itself)
   ;; internal runtime state
   summary-overlay  ;; used in summary view only
   emblem-img       ;; derived from emblem
@@ -323,6 +326,11 @@ Args:
   `major-mode-remap-alist'. Uses the same single-tuple-vs-list-of-
   tuples normalization as :tree-sitter-grammars.
 - :repository (plist with :type, :url, :path)
+- :hidden (boolean, default nil) — when non-nil, marks the extension as
+  not user-manageable: it is a permanent, structural part of the
+  framework (e.g. the extension manager itself) rather than something
+  users pick, so consumers like the Extension Manager's card list
+  should omit it.
 
 This macro relies on two dynamic variables being bound:
 
@@ -372,6 +380,7 @@ This macro relies on two dynamic variables being bound:
 		:type (plist-get repo-raw :type)
 		:url (plist-get repo-raw :url)
 		:path (plist-get repo-raw :path)))
+	 (hidden (plist-get args :hidden))
 	 (extension (make-neo/extension
 		     :name name
 		     :title title
@@ -386,6 +395,7 @@ This macro relies on two dynamic variables being bound:
 		     :tree-sitter-grammars grammar-list
 		     :tree-sitter-modes mode-list
 		     :repository repo
+		     :hidden hidden
 		     :summary-overlay nil))
 	 (slug (neo--extension-slug extension)))
     `(puthash ,(neo/extension-slug-to-string slug) ,extension neo--extensions)))
