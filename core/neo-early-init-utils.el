@@ -186,6 +186,23 @@ Return value is non-nil if THING should be shown, nil otherwise."
       (restart-emacs)
     (save-buffers-kill-emacs)))
 
+(defun neo/start-configuration (_button)
+  "Boot with only the extension manager enabled, and land on it.
+
+Persists `enabled-extensions' as just `(\"neo:extension-manager\")' -- that
+extension has no `:requires' of its own, so it loads standalone -- and sets a
+one-shot `\"launch-extensions-manager-on-startup\"' flag that
+`neo/manager--maybe-launch-on-startup' (in the extension-manager extension)
+consumes on the next boot to open the manager instead of a blank buffer."
+  (require 'neo-config)
+  (neo/set-config "enabled-extensions" "(\"neo:extension-manager\")")
+  (neo/set-config "pretend-new-user" "nil")
+  (neo/set-config "paraphenalia-config" "()")
+  (neo/set-config "launch-extensions-manager-on-startup" "t")
+  (if (fboundp 'restart-emacs)
+      (restart-emacs)
+    (save-buffers-kill-emacs)))
+
 ;; (defun neo--make-image-label (filename &optional scale)
 ;;   "Create a display label from FILENAME in the NEO assets directory.
 ;; Optional SCALE defaults to 1.0."
@@ -238,7 +255,7 @@ Return value is non-nil if THING should be shown, nil otherwise."
         (apply orig-fun
                `("\n" :face default ,separator
                  :face (:inherit variable-pitch :weight bold) "Welcome to Neo!\t"
-                 :link ("Start configuration" ,(lambda (_b) (message "Clicked")) "Help" (:weight bold))
+                 :link ("Start configuration" ,#'neo/start-configuration "Help" (:weight bold))
 	         "\t"
                  :link ("Don't do this 😜" ,#'neo/full-monty "Go full Monty")
 		 "\n"
@@ -255,7 +272,7 @@ Return value is non-nil if THING should be shown, nil otherwise."
       (insert "\n" separator)
       (insert "Welcome to Neo!\n\n")
       (insert-button "Start configuration"
-                     'action (lambda (_b) (message "Clicked"))
+                     'action #'neo/start-configuration
                      'follow-link t)
       (insert "    ")
       (insert-button "Don't do this 😜"
