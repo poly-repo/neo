@@ -764,7 +764,14 @@ Repository content is also updated."
                              (error-message-string err)
                              cached-manifest-path)
                cached-manifest-path)
-           (signal (car err) (cdr err))))))))
+           (neo/log-error 'core
+                          "[neo] Failed to fetch %s extensions manifest: %s. No cached manifest available."
+                          name
+                          (error-message-string err))
+           (message "[neo] Failed to fetch %s extensions manifest: %s. Extensions from this registry will be unavailable this session."
+                    name
+                    (error-message-string err))
+           nil))))))
 
 (defun neo/fetch-extensions-config ()
   "Load user-specific configuration from the cache directory.
