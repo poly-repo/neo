@@ -114,14 +114,21 @@ in 'publisher:name' format."
   "Replay package configurations for all installed extensions in FRAMEWORK.")
 
 (cl-defmethod neo/replay-installed-extensions-packages ((framework neo-framework))
-  "Replay package configurations for all installed extensions in FRAMEWORK."
-  (let ((installed (neo-framework-installed-extensions framework))
-        (neo--replayed-package-installs (make-hash-table :test 'equal)))
-    (maphash
-     (lambda (_slug installation)
-       (let ((slug (neo/installation-extension-slug installation)))
-         (neo/replay-extension-packages slug)))
-     installed))
+  "Replay package configurations for all installed extensions in FRAMEWORK.
+
+Extensions are replayed in the same dependency-respecting topological
+order used by `neo/load-installed-extensions', so that a `neo/use-package'
+declaration in a dependency extension is always installed/configured
+before the declarations of extensions that `:require' it -- `maphash'
+order over `installed-extensions' gives no such guarantee."
+  (let* ((installed-map (neo-framework-installed-extensions framework))
+         (available (neo-framework-available-extensions framework))
+         (installed-slugs (let (keys) (maphash (lambda (k _v) (push k keys)) installed-map) keys))
+         (sorted-slugs (neo/topo-sort-from-roots available installed-slugs '(:on-missing ignore)))
+         (neo--replayed-package-installs (make-hash-table :test 'equal)))
+    (dolist (slug-string sorted-slugs)
+      (when-let* ((installation (gethash slug-string installed-map)))
+        (neo/replay-extension-packages (neo/installation-extension-slug installation)))))
   (setq neo/framework-bootstrapped-p t)
   (run-hooks 'neo/after-framework-bootstrap-hook))
 
