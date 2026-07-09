@@ -47,9 +47,11 @@
   (require 'neo)
   (elpaca-process-queues)
   (elpaca-wait)
-  (condition-case err
-      (simple-modeline-mode 1)
-    (file-missing (message "NEO: simple-modeline not available: %s" (error-message-string err)))))
+  ;; `simple-modeline-mode' is defined by `neo:ui' (neo-ui-modeline.el); leave
+  ;; the modeline untouched when that extension isn't enabled/loaded, rather
+  ;; than erroring on init.
+  (when (fboundp 'simple-modeline-mode)
+    (simple-modeline-mode 1)))
   ;; The dashboard is shown via `neo/after-perspective-restore-hook' once
   ;; `persp-state-load' has restored perspectives, so it lands last and does
   ;; not flicker through a restored project perspective. See neo-dashboard.el.
