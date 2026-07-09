@@ -650,12 +650,25 @@ The original `neo/use-package' is restored afterwards."
       (let ((load-path (append (neo--extension-load-path file-dir) load-path))
             (used-packages '()))
         ;; load the extension, collecting package-name . package-desc alist
-        (neo/load-with-dummy-use-package
-         file
-         (lambda (pkg)
-           (push (cons (symbol-name pkg)
-                       (neo/find-package-desc pkg))
-                 used-packages)))
+        ;;
+        ;; This is best-effort introspection for a UI card, not a real load:
+        ;; EXT may not be installed yet, so any top-level `require' of a file
+        ;; owned by another extension (e.g. neo:neo-workflow's `(require
+        ;; 'beads-client)', which lives under neo:programming-foundation) can
+        ;; fail here simply because that other extension's directory isn't on
+        ;; `load-path' yet. Swallow such errors instead of letting a card's
+        ;; package listing take down the whole render (and, when this runs
+        ;; during startup, all of `init.el').
+        (condition-case err
+            (neo/load-with-dummy-use-package
+             file
+             (lambda (pkg)
+               (push (cons (symbol-name pkg)
+                           (neo/find-package-desc pkg))
+                     used-packages)))
+          (error
+           (neo/log-warn 'core "Could not introspect packages for %s: %s"
+                         name (error-message-string err))))
         ;; reverse so order matches original
         (reverse used-packages)))))
 

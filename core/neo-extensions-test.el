@@ -119,6 +119,35 @@ since `load-file-name' is only bound while this file is being loaded
       (fmakunbound 'neo--sample-delayed-require)
       (delete-directory base-dir t))))
 
+(ert-deftest neo--get-extension-info-survives-require-of-uninstalled-extension ()
+  "Return nil instead of erroring when EXT's entry file requires a feature
+owned by an extension that is not (yet) on `load-path'.
+
+Regression test: `neo--get-extension-info' loads every *available*
+extension's entry file to introspect its `neo/use-package' calls for the
+Extension Manager's card display, even when that extension is not
+installed. An extension like neo:neo-workflow does a top-level `(require
+'beads-client)' that only resolves once neo:programming-foundation has
+been loaded; rendering its card before that must not crash the caller."
+  (let* ((base-dir (make-temp-file "neo-extension-base-" t))
+         (extension-dir (expand-file-name "neo/sample" base-dir))
+         (entry-file (expand-file-name "neo-sample.el" extension-dir))
+         (extension (make-neo/extension :publisher "neo" :name "sample"))
+         (original-load-path load-path))
+    (unwind-protect
+        (progn
+          (make-directory extension-dir t)
+          (with-temp-file entry-file
+            (insert ";;; -*- lexical-binding: t -*-\n(require 'neo-extensions-test-nonexistent-feature)\n"))
+          (cl-letf (((symbol-function 'neo--extensions-base-dir)
+                     (lambda () base-dir))
+                    ;; Avoid a real `package-refresh-contents' network call.
+                    ((symbol-function 'neo/refresh-package-archives)
+                     (lambda ())))
+            (should-not (neo--get-extension-info extension))))
+      (setq load-path original-load-path)
+      (delete-directory base-dir t))))
+
 (ert-deftest neo/latest-registry-release-parses-github-assets ()
   "Resolve the published manifest SHA from the latest release assets."
   (let* ((sha "1234567890abcdef1234567890abcdef12345678")
