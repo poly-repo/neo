@@ -243,6 +243,42 @@ been loaded; rendering its card before that must not crash the caller."
                            (format "extensions-%s.el" sha)))))
       (delete-directory cache-root t))))
 
+(ert-deftest neo/fetch-extensions-returns-nil-when-uncached-and-unreachable ()
+  "Degrade gracefully instead of signaling when there is no cached
+manifest and the remote fetch fails.
+
+Regression test: with nothing cached (fresh instance, first boot,
+network down), `neo/fetch-extensions' used to re-signal the original
+error out of its `condition-case' handler, which aborts `(require
+'neo)' and leaves the user in a half-initialized Emacs. It must
+instead log the failure and return nil."
+  (let* ((cache-root (make-temp-file "neo-extensions-cache-" t))
+         (registry
+          (make-neo--extension-registry
+           :name "mav"
+           :url "https://github.com/poly-repo/mav-extensions.git"))
+         errors)
+    (unwind-protect
+        (cl-letf (((symbol-function 'neo/get-emacs-instance-name)
+                   (lambda ()
+                     "neo"))
+                  ((symbol-function 'neo--latest-registry-release)
+                   (lambda (_registry)
+                     (error "[neo] Could not reach GitHub")))
+                  ((symbol-function 'neo/cache-file-path)
+                   (lambda (path)
+                     (expand-file-name path cache-root)))
+                  ((symbol-function 'neo/log-error)
+                   (lambda (&rest args) (push args errors))))
+          (let* ((cache-dir (expand-file-name "extensions/mav/" cache-root))
+                 (manifest-link (expand-file-name "extensions-current.el"
+                                                  cache-dir)))
+            (should-not (neo/fetch-extensions registry))
+            (should (= (length errors) 1))
+            (should (eq (caar errors) 'core))
+            (should-not (file-exists-p manifest-link))))
+      (delete-directory cache-root t))))
+
 (ert-deftest neo/extension-tree-sitter-grammars-normalizes-single-tuple ()
   "A single (LANG URL ...) tuple is wrapped into a one-element list.
 Unlike `:requires', whose single-value case is a bare string, a
