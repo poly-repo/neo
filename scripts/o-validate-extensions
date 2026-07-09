@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+#
+# Boots a scratch Neo instance with only the Extension Manager enabled, then
+# restarts it once per user-installable extension (extension-manager + that
+# extension) to confirm each one loads cleanly, with no errors and no new
+# warnings relative to the extension-manager-only baseline.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EMACS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+EMACS_BIN="${EMACS_BIN:-emacs}"
+INSTANCE="neo-validate"
+WORKDIR="${TMPDIR:-/tmp}/o-validate-extensions"
+TIMEOUT=300
+CLEAN=""
+ONLY=""
+SKIP=""
+INCLUDE_FULL_MONTY=""
+DONE_MARKER="NEO-VALIDATE-DONE"
+
+usage() {
+    cat <<'EOF'
+Usage: o-validate-extensions [options]
+
+Options:
+  --emacs PATH          Emacs binary to use (default: $EMACS_BIN or "emacs")
+  --instance NAME       Scratch instance name (default: neo-validate)
+  --workdir DIR         Scratch XDG dirs live here
+                        (default: $TMPDIR/o-validate-extensions)
+  --timeout SECONDS     Per-boot timeout (default: 300)
+  --only SLUGS          Comma-separated publisher:name slugs to test
+                        (default: all user-installable extensions)
+  --skip SLUGS          Comma-separated publisher:name slugs to skip
+  --include-full-monty  Also validate neo:full-monty (excluded by default:
+                        it aggregates every other extension, so it is slow
+                        and redundant with per-extension coverage)
+  --clean               Wipe the scratch workdir before starting
+  -h, --help            Show this help
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --emacs) EMACS_BIN="$2"; shift 2 ;;
+        --instance) INSTANCE="$2"; shift 2 ;;
+        --workdir) WORKDIR="$2"; shift 2 ;;
+        --timeout) TIMEOUT="$2"; shift 2 ;;
+        --only) ONLY="$2"; shift 2 ;;
+        --skip) SKIP="$2"; shift 2 ;;
+        --include-full-monty) INCLUDE_FULL_MONTY=1; shift ;;
+        --clean) CLEAN=1; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Error: unknown option $1" >&2; usage; exit 1 ;;
+    esac
+done
+
+for bin in "$EMACS_BIN" sqlite3 timeout; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+        echo "Error: required binary not found: $bin" >&2
+        exit 1
+    fi
+done
+
+if [[ -n "$CLEAN" ]]; then
+    rm -rf "$WORKDIR"
+fi
+
+CONFIG_HOME="$WORKDIR/config"
+CACHE_HOME="$WORKDIR/cache"
+RUNTIME_DIR="$WORKDIR/runtime"
+LOG_DIR="$WORKDIR/logs"
+PROFILE_DIR="$CONFIG_HOME/$INSTANCE/current-profile"
+DB_PATH="$PROFILE_DIR/neo.sqlite"
+
+mkdir -p "$PROFILE_DIR" "$CACHE_HOME/$INSTANCE" "$RUNTIME_DIR" "$LOG_DIR"
+chmod 700 "$RUNTIME_DIR"
+
+export XDG_CONFIG_HOME="$CONFIG_HOME"
+export XDG_CACHE_HOME="$CACHE_HOME"
+export XDG_RUNTIME_DIR="$RUNTIME_DIR"
+
+# Builds a Lisp-readable list literal, e.g. ("neo:extension-manager" "neo:foo").
+build_enabled_lisp() {
+    local out="(" first=1
+    for slug in "$@"; do
+        [[ $first -eq 0 ]] && out+=" "
+        out+="\"${slug}\""
+        first=0
+    done
+    out+=")"
+    printf '%s' "$out"
+}
+
+seed_config() {
+    local enabled_lisp="$1"
+    sqlite3 "$DB_PATH" \
+        "CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT);"
+    sqlite3 "$DB_PATH" \
+        "INSERT OR REPLACE INTO config (key, value) VALUES ('enabled-extensions', '${enabled_lisp}');"
+    sqlite3 "$DB_PATH" \
+        "INSERT OR REPLACE INTO config (key, value) VALUES ('pretend-new-user', 'nil');"
+}
+
+# Lists non-hidden extension slugs known to this checkout, one per line.
+enumerate_extensions() {
+    "$EMACS_BIN" --batch --no-site-file -name "$INSTANCE" \
+        --eval "(setq user-emacs-directory \"${EMACS_DIR}/\")" \
+        -l "${EMACS_DIR}/early-init.el" \
+        -l neo-extensions \
+        -l neo-framework \
+        --eval '(let (names)
+                  (maphash (lambda (k v)
+                             (unless (neo/extension-hidden v) (push k names)))
+                           (neo-framework-available-extensions (neo--framework-instance)))
+                  (dolist (n (sort names #'"'"'string<)) (princ n) (terpri)))' \
+        2>/dev/null
+}
+
+# Boots Neo with the given enabled-extensions Lisp list already seeded into
+# the config db, logging combined stdout/stderr to LOG_FILE. Echoes the exit
+# code (0 on a clean batch run, non-zero on timeout/crash).
+boot_neo() {
+    local log_file="$1"
+    local rc=0
+    timeout "$TIMEOUT" "$EMACS_BIN" --batch --no-site-file -name "$INSTANCE" \
+        --eval "(setq user-emacs-directory \"${EMACS_DIR}/\")" \
+        -l "${EMACS_DIR}/early-init.el" \
+        -l "${EMACS_DIR}/init.el" \
+        --eval "(message \"${DONE_MARKER} installed=%s\" (hash-table-keys (neo-framework-installed-extensions (neo--framework-instance))))" \
+        >"$log_file" 2>&1 || rc=$?
+    echo "$rc"
+}
+
+# Prints the lines in LOG_FILE that look like warnings/errors/backtraces.
+extract_noise() {
+    grep -iE 'warning|error|Debugger entered' "$1" 2>/dev/null || true
+}
+
+echo "== Enumerating user-installable extensions =="
+mapfile -t all_slugs < <(enumerate_extensions)
+if [[ ${#all_slugs[@]} -eq 0 ]]; then
+    echo "Error: no extensions discovered -- enumeration step is broken" >&2
+    exit 1
+fi
+
+slugs=()
+for slug in "${all_slugs[@]}"; do
+    if [[ -z "$INCLUDE_FULL_MONTY" && "$slug" == "neo:full-monty" ]]; then
+        continue
+    fi
+    if [[ -n "$ONLY" && ",${ONLY}," != *",${slug},"* ]]; then
+        continue
+    fi
+    if [[ -n "$SKIP" && ",${SKIP}," == *",${slug},"* ]]; then
+        continue
+    fi
+    slugs+=("$slug")
+done
+
+if [[ ${#slugs[@]} -eq 0 ]]; then
+    echo "Error: no extensions left to validate after --only/--skip filtering" >&2
+    exit 1
+fi
+
+echo "Found ${#all_slugs[@]} extension(s), validating ${#slugs[@]}:"
+printf '  %s\n' "${slugs[@]}"
+
+echo
+echo "== Baseline boot (extension-manager only) =="
+baseline_log="$LOG_DIR/baseline.log"
+seed_config "$(build_enabled_lisp "neo:extension-manager")"
+baseline_rc=$(boot_neo "$baseline_log")
+if [[ "$baseline_rc" != "0" ]] || ! grep -q "$DONE_MARKER" "$baseline_log"; then
+    echo "FAIL: baseline boot did not complete cleanly (exit $baseline_rc)" >&2
+    tail -40 "$baseline_log" >&2
+    exit 1
+fi
+extract_noise "$baseline_log" | sort -u >"$LOG_DIR/baseline.noise"
+echo "Baseline OK ($(wc -l <"$LOG_DIR/baseline.noise") known warning/error line(s), treated as noise)"
+
+declare -a failed=() warned=()
+
+echo
+echo "== Per-extension validation =="
+for slug in "${slugs[@]}"; do
+    safe_name="${slug//:/_}"
+    log_file="$LOG_DIR/${safe_name}.log"
+    seed_config "$(build_enabled_lisp "neo:extension-manager" "$slug")"
+    rc=$(boot_neo "$log_file")
+
+    if [[ "$rc" != "0" ]] || ! grep -q "$DONE_MARKER" "$log_file"; then
+        echo "FAIL  $slug (exit $rc, no clean completion marker)"
+        failed+=("$slug")
+        continue
+    fi
+
+    if ! grep -q "installed=.*${slug}" "$log_file"; then
+        echo "FAIL  $slug (booted, but not reported as installed)"
+        failed+=("$slug")
+        continue
+    fi
+
+    extract_noise "$log_file" | sort -u >"$LOG_DIR/${safe_name}.noise"
+    new_noise=$(comm -13 "$LOG_DIR/baseline.noise" "$LOG_DIR/${safe_name}.noise")
+    if [[ -n "$new_noise" ]]; then
+        echo "WARN  $slug (new warning/error output vs. baseline)"
+        echo "$new_noise" | sed 's/^/        /'
+        warned+=("$slug")
+    else
+        echo "PASS  $slug"
+    fi
+done
+
+echo
+echo "== Summary =="
+echo "Passed: $(( ${#slugs[@]} - ${#failed[@]} - ${#warned[@]} )) / ${#slugs[@]}"
+if [[ ${#warned[@]} -gt 0 ]]; then
+    echo "With new warnings: ${warned[*]}"
+fi
+if [[ ${#failed[@]} -gt 0 ]]; then
+    echo "Failed: ${failed[*]}"
+    echo "Logs kept under: $LOG_DIR"
+    exit 1
+fi
+
+exit 0
