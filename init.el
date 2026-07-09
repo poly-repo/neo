@@ -43,8 +43,6 @@
 (dolist (subdir '("core"))
   (add-to-list 'load-path (expand-file-name subdir user-emacs-directory)))
 
-;; TODO not sure if needed. I think I had problems with lexical binding
-					;(require 'neo-early-init-utils)
 (defun neo--startup ()
   (require 'neo)
   (elpaca-process-queues)
