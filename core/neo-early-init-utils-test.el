@@ -69,5 +69,15 @@ with no dependency on neo:ui."
   (should (fboundp 'neo--repair-collapsed-frame))
   (should (not (featurep 'neo-ui-frame))))
 
+(ert-deftest neo/frame-collapse-repair-reacts-to-size-change-events ()
+  "The collapse repair must not rely solely on fixed-delay retry timers.
+
+Regression test: the retry timers are scheduled from `early-init.el' load
+time, well before the initial frame exists, so a toolkit collapse that
+manifests later than the last retry would go unrepaired forever. A reactive
+`window-size-change-functions' hook catches the collapse whenever Emacs
+actually notices the frame's size changed, independent of timing."
+  (should (memq #'neo--repair-collapsed-frame window-size-change-functions)))
+
 (provide 'neo-early-init-utils-test)
 ;;; neo-early-init-utils-test.el ends here
