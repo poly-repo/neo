@@ -64,7 +64,7 @@ unrepaired.  `neo-early-init-utils' is required unconditionally by
 early-init.el, so its hooks must be present as soon as this file loads,
 with no dependency on neo:ui."
   (should (memq #'neo/apply-restored-frame-geometry emacs-startup-hook))
-  (should (memq #'neo/ensure-frame-onscreen-and-usable after-make-frame-functions))
+  (should (memq #'neo--defer-ensure-frame-onscreen-and-usable after-make-frame-functions))
   (should (memq #'neo/save-initial-frame-properties kill-emacs-hook))
   (should (fboundp 'neo--repair-collapsed-frame))
   (should (not (featurep 'neo-ui-frame))))
@@ -93,6 +93,38 @@ Emacs actually notices the frame's size changed, independent of timing."
   (let ((window-size-change-functions nil))
     (neo/apply-restored-frame-geometry)
     (should (memq #'neo--repair-collapsed-frame window-size-change-functions))))
+
+(ert-deftest neo/ensure-frame-onscreen-and-usable-skips-reposition-during-transient-collapse ()
+  "Do not reposition using pixel geometry that looks like the GTK3 collapse.
+
+Regression test: `frame-pixel-width'/`frame-pixel-height' read right after
+frame creation can transiently report the toolkit's known ~200x200px
+collapse signature before the real layout settles.  Computing an on-screen
+offset from those bogus numbers is what drove the frame into the
+bottom-right corner on the splash boot once this repair started running
+via `after-make-frame-functions' on every boot instead of only when
+neo:ui happened to be loaded.  While the frame still looks collapsed,
+repositioning must be skipped entirely (the resize path already brings it
+up to a safe size; a later call will see real numbers and reposition then
+if still needed)."
+  (let ((frame 'fake-frame)
+        (reposition-calls nil))
+    (cl-letf (((symbol-function 'frame-live-p) (lambda (_) t))
+              ((symbol-function 'display-graphic-p) (lambda (_) t))
+              ((symbol-function 'frame-parameter) (lambda (_ _p) nil))
+              ((symbol-function 'frame-monitor-workarea) (lambda (_) '(0 0 1920 1080)))
+              ((symbol-function 'frame-char-width) (lambda (_) 10))
+              ((symbol-function 'frame-char-height) (lambda (_) 20))
+              ((symbol-function 'frame-width) (lambda (_) 140))
+              ((symbol-function 'frame-height) (lambda (_) 42))
+              ((symbol-function 'frame-pixel-width) (lambda (_) 200))
+              ((symbol-function 'frame-pixel-height) (lambda (_) 200))
+              ((symbol-function 'frame-position) (lambda (_) '(1700 . 900)))
+              ((symbol-function 'set-frame-size) (lambda (&rest _) nil))
+              ((symbol-function 'set-frame-position)
+               (lambda (&rest args) (push args reposition-calls))))
+      (neo/ensure-frame-onscreen-and-usable frame)
+      (should-not reposition-calls))))
 
 (provide 'neo-early-init-utils-test)
 ;;; neo-early-init-utils-test.el ends here
