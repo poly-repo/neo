@@ -541,9 +541,14 @@ frame walk."
 (defun neo/apply-restored-frame-geometry (&optional frame)
   "Repair a collapsed FRAME then apply the on-screen clamp and usable floor.
 Repositioning happens only here (once at startup / per new frame), never on
-the retry timers."
+the retry timers.  Also arms the reactive `window-size-change-functions'
+repair (see comment below) -- deliberately NOT armed any earlier than this,
+so it cannot see the toolkit's own noisy intermediate sizes while the initial
+frame is still being realized/mapped, which could otherwise misfire and
+visibly yank the frame mid-realization."
   (neo--repair-collapsed-frame frame)
-  (neo/ensure-frame-onscreen-and-usable frame))
+  (neo/ensure-frame-onscreen-and-usable frame)
+  (add-hook 'window-size-change-functions #'neo--repair-collapsed-frame))
 
 (defun neo--schedule-frame-collapse-retries ()
   "Schedule a few short retries of the resize-only collapse repair.
@@ -551,21 +556,26 @@ Anchored to `emacs-startup-hook' rather than file load time: this file loads
 from `early-init.el', well before the initial frame is even created, so
 delays counted from then no longer reliably bracket the toolkit's collapse,
 which can manifest asynchronously well after startup finishes.  These are a
-fallback for `window-size-change-functions' below, which is the primary,
-timing-independent catch."
+fallback for `window-size-change-functions', which is the primary,
+timing-independent catch once armed."
   (dolist (delay '(0.2 0.6 1.2 2.5 5.0))
     (run-with-timer delay nil #'neo--repair-collapsed-frame)))
 
 ;; Repair a collapsed frame at startup, on a few short retry timers, and
-;; reactively whenever Emacs notices a frame/window size change (the collapse
-;; can appear late and never self-corrects, and the toolkit's own resize event
-;; is a more reliable trigger than any fixed delay).  The retries and the
-;; reactive hook call the resize-ONLY repair — they never reposition — so they
-;; cannot make the frame walk.  The on-screen clamp/floor runs once at startup
-;; and for each new frame.
+;; (from that point on) reactively whenever Emacs notices a frame/window size
+;; change (the collapse can appear late and never self-corrects, and the
+;; toolkit's own resize event is a more reliable trigger than any fixed
+;; delay).  The `window-size-change-functions' hook is armed inside
+;; `neo/apply-restored-frame-geometry' itself -- not registered here at load
+;; time -- so it only starts watching once Emacs's own startup has completed
+;; and the initial frame has already been realized once; registering it any
+;; earlier would let it react to the toolkit's transient in-progress sizes
+;; while the window manager is still mapping the very first frame.  The
+;; retries and the reactive hook call the resize-ONLY repair — they never
+;; reposition — so they cannot make the frame walk.  The on-screen clamp/floor
+;; runs once at startup and for each new frame.
 (add-hook 'emacs-startup-hook #'neo/apply-restored-frame-geometry)
 (add-hook 'emacs-startup-hook #'neo--schedule-frame-collapse-retries)
-(add-hook 'window-size-change-functions #'neo--repair-collapsed-frame)
 (add-hook 'after-make-frame-functions #'neo/ensure-frame-onscreen-and-usable)
 
 (provide 'neo-early-init-utils)

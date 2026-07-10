@@ -69,15 +69,30 @@ with no dependency on neo:ui."
   (should (fboundp 'neo--repair-collapsed-frame))
   (should (not (featurep 'neo-ui-frame))))
 
-(ert-deftest neo/frame-collapse-repair-reacts-to-size-change-events ()
+(ert-deftest neo/frame-collapse-repair-not-armed-before-startup-completes ()
+  "The reactive size-change hook must not be armed at file load time.
+
+Regression test: arming `window-size-change-functions' unconditionally at
+load time (i.e. from `early-init.el', before the initial frame is even
+realized) let it react to the toolkit's own noisy intermediate sizes while
+the window manager was still mapping the very first frame, visibly yanking
+it mid-realization -- observed as the splash frame flashing and jumping to a
+collapsed size/position instead of showing normally."
+  (should-not (memq #'neo--repair-collapsed-frame window-size-change-functions)))
+
+(ert-deftest neo/frame-collapse-repair-reacts-to-size-change-events-after-startup ()
   "The collapse repair must not rely solely on fixed-delay retry timers.
 
 Regression test: the retry timers are scheduled from `early-init.el' load
 time, well before the initial frame exists, so a toolkit collapse that
 manifests later than the last retry would go unrepaired forever. A reactive
-`window-size-change-functions' hook catches the collapse whenever Emacs
-actually notices the frame's size changed, independent of timing."
-  (should (memq #'neo--repair-collapsed-frame window-size-change-functions)))
+`window-size-change-functions' hook, armed once `neo/apply-restored-frame-geometry'
+has run at least once (i.e. after Emacs's own startup has completed and the
+initial frame has already been realized), catches a later collapse whenever
+Emacs actually notices the frame's size changed, independent of timing."
+  (let ((window-size-change-functions nil))
+    (neo/apply-restored-frame-geometry)
+    (should (memq #'neo--repair-collapsed-frame window-size-change-functions))))
 
 (provide 'neo-early-init-utils-test)
 ;;; neo-early-init-utils-test.el ends here
