@@ -497,20 +497,27 @@ on-screen is not touched."
         ;; Reposition ONLY when the frame is off-screen by more than a small
         ;; margin.  Nudging an already-visible frame every launch is what makes
         ;; the position "jump around", so leave a visible frame exactly where the
-        ;; window manager put it.
-        (let* ((pos (frame-position frame))
-               (fx (car pos)) (fy (cdr pos))
-               (pw (frame-pixel-width frame))
-               (ph (frame-pixel-height frame))
-               (margin 16)
-               (nx (cond ((< fx (- wx margin)) wx)
-                         ((> (+ fx pw) (+ wx ww margin)) (max wx (- (+ wx ww) pw)))
-                         (t fx)))
-               (ny (cond ((< fy (- wy margin)) wy)
-                         ((> (+ fy ph) (+ wy wh margin)) (max wy (- (+ wy wh) ph)))
-                         (t fy))))
-          (when (or (/= nx fx) (/= ny fy))
-            (set-frame-position frame nx ny)))))))
+        ;; window manager put it.  Also skip entirely while the frame still
+        ;; reports the toolkit's known ~200x200px transient collapse signature
+        ;; (see `neo--repair-collapsed-frame'): pixel geometry read during that
+        ;; transient is meaningless, and computing an offset from it is what
+        ;; drove the frame into the bottom-right corner instead of merely
+        ;; leaving it alone until the real size settles.
+        (let* ((pw (frame-pixel-width frame))
+               (ph (frame-pixel-height frame)))
+          (unless (or (< pw neo/minimum-frame-pixel-width)
+                      (< ph neo/minimum-frame-pixel-height))
+            (let* ((pos (frame-position frame))
+                   (fx (car pos)) (fy (cdr pos))
+                   (margin 16)
+                   (nx (cond ((< fx (- wx margin)) wx)
+                             ((> (+ fx pw) (+ wx ww margin)) (max wx (- (+ wx ww) pw)))
+                             (t fx)))
+                   (ny (cond ((< fy (- wy margin)) wy)
+                             ((> (+ fy ph) (+ wy wh margin)) (max wy (- (+ wy wh) ph)))
+                             (t fy))))
+              (when (or (/= nx fx) (/= ny fy))
+                (set-frame-position frame nx ny)))))))))
 
 (defun neo--repair-collapsed-frame (&optional frame)
   "Resize FRAME back to its intended size if the toolkit created it collapsed.
@@ -576,6 +583,19 @@ timing-independent catch once armed."
 ;; runs once at startup and for each new frame.
 (add-hook 'emacs-startup-hook #'neo/apply-restored-frame-geometry)
 (add-hook 'emacs-startup-hook #'neo--schedule-frame-collapse-retries)
-(add-hook 'after-make-frame-functions #'neo/ensure-frame-onscreen-and-usable)
+
+(defun neo--defer-ensure-frame-onscreen-and-usable (frame)
+  "Run `neo/ensure-frame-onscreen-and-usable' on FRAME after this tick.
+`after-make-frame-functions' runs synchronously in the same beat as frame
+creation, before the window manager/toolkit has finished laying the frame
+out -- on this GTK3 build that is exactly when pixel geometry can still read
+the transient ~200x200px collapse signature.  Deferring by one command loop
+iteration lets that settle first instead of computing a resize/reposition
+from bogus numbers, which is what visibly yanked the frame to the
+bottom-right corner during the very first (splash) boot once this repair
+started running on every frame instead of only when neo:ui was loaded."
+  (run-with-timer 0 nil #'neo/ensure-frame-onscreen-and-usable frame))
+
+(add-hook 'after-make-frame-functions #'neo--defer-ensure-frame-onscreen-and-usable)
 
 (provide 'neo-early-init-utils)
