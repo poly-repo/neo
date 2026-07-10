@@ -93,8 +93,11 @@ This variable is used by `neo/paraphenalia` to determine visibility of UI compon
 ;; NOTE: deliberately do NOT set `frame-inhibit-implied-resize'.  On this
 ;; Emacs/GTK3 build the initial frame is intermittently created collapsed to
 ;; ~200x200px; inhibiting implied resizes only risks keeping that broken frame
-;; from being corrected.  The collapse is repaired explicitly in neo-ui-frame.el
-;; (`neo/apply-restored-frame-geometry', with retry timers).
+;; from being corrected.  The collapse is repaired explicitly above, via
+;; `neo/apply-restored-frame-geometry' (retry timers plus a reactive
+;; `window-size-change-functions' hook, both defined in
+;; `neo-early-init-utils.el' so they run on every boot, not just when the
+;; neo:ui extension happens to load).
 
 
 ;; TODO when no existing config is found, we would like to show a

@@ -482,35 +482,35 @@ on-screen is not touched."
   (when (and (frame-live-p frame)
              (display-graphic-p frame)
              (not (frame-parameter frame 'parent-frame)))
-    (let* ((wa (frame-monitor-workarea frame))
-           (wx (nth 0 wa)) (wy (nth 1 wa)) (ww (nth 2 wa)) (wh (nth 3 wa))
-           (cw (max 1 (frame-char-width frame)))
-           (chh (max 1 (frame-char-height frame)))
-           (max-cols (max neo/minimum-frame-cols (/ ww cw)))
-           (max-rows (max neo/minimum-frame-rows (/ wh chh)))
-           (cols (frame-width frame))
-           (rows (frame-height frame))
-           (want-cols (min max-cols (max cols neo/default-frame-width)))
-           (want-rows (min max-rows (max rows neo/default-frame-height))))
-      (when (or (/= want-cols cols) (/= want-rows rows))
-        (set-frame-size frame want-cols want-rows))
-      ;; Reposition ONLY when the frame is off-screen by more than a small
-      ;; margin.  Nudging an already-visible frame every launch is what makes
-      ;; the position "jump around", so leave a visible frame exactly where the
-      ;; window manager put it.
-      (let* ((pos (frame-position frame))
-             (fx (car pos)) (fy (cdr pos))
-             (pw (frame-pixel-width frame))
-             (ph (frame-pixel-height frame))
-             (margin 16)
-             (nx (cond ((< fx (- wx margin)) wx)
-                       ((> (+ fx pw) (+ wx ww margin)) (max wx (- (+ wx ww) pw)))
-                       (t fx)))
-             (ny (cond ((< fy (- wy margin)) wy)
-                       ((> (+ fy ph) (+ wy wh margin)) (max wy (- (+ wy wh) ph)))
-                       (t fy))))
-        (when (or (/= nx fx) (/= ny fy))
-          (set-frame-position frame nx ny))))))
+    (when-let* ((wa (frame-monitor-workarea frame))
+                (wx (nth 0 wa)) (wy (nth 1 wa)) (ww (nth 2 wa)) (wh (nth 3 wa)))
+      (let* ((cw (max 1 (frame-char-width frame)))
+             (chh (max 1 (frame-char-height frame)))
+             (max-cols (max neo/minimum-frame-cols (/ ww cw)))
+             (max-rows (max neo/minimum-frame-rows (/ wh chh)))
+             (cols (frame-width frame))
+             (rows (frame-height frame))
+             (want-cols (min max-cols (max cols neo/default-frame-width)))
+             (want-rows (min max-rows (max rows neo/default-frame-height))))
+        (when (or (/= want-cols cols) (/= want-rows rows))
+          (set-frame-size frame want-cols want-rows))
+        ;; Reposition ONLY when the frame is off-screen by more than a small
+        ;; margin.  Nudging an already-visible frame every launch is what makes
+        ;; the position "jump around", so leave a visible frame exactly where the
+        ;; window manager put it.
+        (let* ((pos (frame-position frame))
+               (fx (car pos)) (fy (cdr pos))
+               (pw (frame-pixel-width frame))
+               (ph (frame-pixel-height frame))
+               (margin 16)
+               (nx (cond ((< fx (- wx margin)) wx)
+                         ((> (+ fx pw) (+ wx ww margin)) (max wx (- (+ wx ww) pw)))
+                         (t fx)))
+               (ny (cond ((< fy (- wy margin)) wy)
+                         ((> (+ fy ph) (+ wy wh margin)) (max wy (- (+ wy wh) ph)))
+                         (t fy))))
+          (when (or (/= nx fx) (/= ny fy))
+            (set-frame-position frame nx ny)))))))
 
 (defun neo--repair-collapsed-frame (&optional frame)
   "Resize FRAME back to its intended size if the toolkit created it collapsed.
@@ -545,13 +545,27 @@ the retry timers."
   (neo--repair-collapsed-frame frame)
   (neo/ensure-frame-onscreen-and-usable frame))
 
-;; Repair a collapsed frame at startup AND on a few short retry timers (the
-;; collapse can appear late and never self-corrects).  The retries call the
-;; resize-ONLY repair — they never reposition — so they cannot make the frame
-;; walk.  The on-screen clamp/floor runs once at startup and for each new frame.
+(defun neo--schedule-frame-collapse-retries ()
+  "Schedule a few short retries of the resize-only collapse repair.
+Anchored to `emacs-startup-hook' rather than file load time: this file loads
+from `early-init.el', well before the initial frame is even created, so
+delays counted from then no longer reliably bracket the toolkit's collapse,
+which can manifest asynchronously well after startup finishes.  These are a
+fallback for `window-size-change-functions' below, which is the primary,
+timing-independent catch."
+  (dolist (delay '(0.2 0.6 1.2 2.5 5.0))
+    (run-with-timer delay nil #'neo--repair-collapsed-frame)))
+
+;; Repair a collapsed frame at startup, on a few short retry timers, and
+;; reactively whenever Emacs notices a frame/window size change (the collapse
+;; can appear late and never self-corrects, and the toolkit's own resize event
+;; is a more reliable trigger than any fixed delay).  The retries and the
+;; reactive hook call the resize-ONLY repair — they never reposition — so they
+;; cannot make the frame walk.  The on-screen clamp/floor runs once at startup
+;; and for each new frame.
 (add-hook 'emacs-startup-hook #'neo/apply-restored-frame-geometry)
-(dolist (neo--frame-fix-delay '(0.2 0.6 1.2 2.5))
-  (run-with-timer neo--frame-fix-delay nil #'neo--repair-collapsed-frame))
+(add-hook 'emacs-startup-hook #'neo--schedule-frame-collapse-retries)
+(add-hook 'window-size-change-functions #'neo--repair-collapsed-frame)
 (add-hook 'after-make-frame-functions #'neo/ensure-frame-onscreen-and-usable)
 
 (provide 'neo-early-init-utils)
