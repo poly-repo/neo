@@ -63,38 +63,57 @@ installed the repair hooks, letting a collapsed ~200x200px frame go
 unrepaired.  `neo-early-init-utils' is required unconditionally by
 early-init.el, so its hooks must be present as soon as this file loads,
 with no dependency on neo:ui."
-  (should (memq #'neo/apply-restored-frame-geometry emacs-startup-hook))
-  (should (memq #'neo--defer-ensure-frame-onscreen-and-usable after-make-frame-functions))
+  (should (memq #'neo--defer-apply-restored-frame-geometry after-make-frame-functions))
   (should (memq #'neo/save-initial-frame-properties kill-emacs-hook))
   (should (fboundp 'neo--repair-collapsed-frame))
   (should (not (featurep 'neo-ui-frame))))
 
-(ert-deftest neo/frame-collapse-repair-not-armed-before-startup-completes ()
-  "The reactive size-change hook must not be armed at file load time.
+(ert-deftest neo/frame-collapse-repair-runs-exactly-once-no-retries-or-reactive-hook ()
+  "The collapse repair must not retry on timers or react to size-change events.
 
-Regression test: arming `window-size-change-functions' unconditionally at
-load time (i.e. from `early-init.el', before the initial frame is even
-realized) let it react to the toolkit's own noisy intermediate sizes while
-the window manager was still mapping the very first frame, visibly yanking
-it mid-realization -- observed as the splash frame flashing and jumping to a
-collapsed size/position instead of showing normally."
-  (should-not (memq #'neo--repair-collapsed-frame window-size-change-functions)))
+Regression test: earlier iterations of this repair scheduled retry timers
+\(0.2s-5s\) on `emacs-startup-hook' and armed a reactive
+`window-size-change-functions' hook, so a single frame could be resized
+several times over the first few seconds of every boot -- each a separate
+visible size change during startup, independent of whether the frame was
+ever actually collapsed.  The collapse this repairs never self-corrects
+once it happens, so one deferred pass (from `after-make-frame-functions')
+is correct and sufficient; there is nothing left to retry or react to."
+  (should-not (fboundp 'neo--schedule-frame-collapse-retries))
+  (should-not (memq #'neo/apply-restored-frame-geometry emacs-startup-hook))
+  (should-not window-size-change-functions))
 
-(ert-deftest neo/frame-collapse-repair-reacts-to-size-change-events-after-startup ()
-  "The collapse repair must not rely solely on fixed-delay retry timers.
+(ert-deftest neo/apply-restored-frame-geometry-does-not-resize-a-legitimately-smaller-frame ()
+  "A frame correctly created smaller than the NEO default must not be resized.
 
-Regression test: the retry timers are scheduled from `early-init.el' load
-time, well before the initial frame exists, so a toolkit collapse that
-manifests later than the last retry would go unrepaired forever. A reactive
-`window-size-change-functions' hook, armed once `neo/apply-restored-frame-geometry'
-has run at least once (i.e. after Emacs's own startup has completed and the
-initial frame has already been realized), catches a later collapse whenever
-Emacs actually notices the frame's size changed, independent of timing."
-  (let ((window-size-change-functions nil))
-    (neo/apply-restored-frame-geometry)
-    (should (memq #'neo--repair-collapsed-frame window-size-change-functions))))
+Regression test: `neo/ensure-frame-onscreen-and-usable' floors any frame up
+to at least the NEO default (140x42) unconditionally, which is exactly
+right for its intended caller (`neo-projects.el', guaranteeing room for a
+saved perspective layout) but wrong at frame-creation time -- wiring it
+into `after-make-frame-functions' forced every saved geometry smaller than
+the default back up to 140x42 on every single launch, which is the
+\"starts wrong, then changes\" symptom.  The frame-creation path must use
+only `neo--repair-collapsed-frame', which leaves a frame alone unless it is
+below the true collapse threshold (`neo/minimum-frame-cols'/
+`neo/minimum-frame-rows'), far below the NEO default."
+  (let ((frame 'fake-frame)
+        (resize-calls nil))
+    (cl-letf (((symbol-function 'frame-live-p) (lambda (_) t))
+              ((symbol-function 'display-graphic-p) (lambda (_) t))
+              ((symbol-function 'frame-parameter) (lambda (_ _p) nil))
+              ((symbol-function 'frame-width) (lambda (_) 100))
+              ((symbol-function 'frame-height) (lambda (_) 30))
+              ((symbol-function 'frame-monitor-workarea) (lambda (_) '(0 0 1920 1080)))
+              ((symbol-function 'frame-pixel-width) (lambda (_) 1000))
+              ((symbol-function 'frame-pixel-height) (lambda (_) 700))
+              ((symbol-function 'frame-position) (lambda (_) '(100 . 100)))
+              ((symbol-function 'set-frame-size)
+               (lambda (&rest args) (push args resize-calls)))
+              ((symbol-function 'set-frame-position) (lambda (&rest _) nil)))
+      (neo/apply-restored-frame-geometry frame)
+      (should-not resize-calls))))
 
-(ert-deftest neo/ensure-frame-onscreen-and-usable-skips-reposition-during-transient-collapse ()
+(ert-deftest neo/reposition-frame-onscreen-skips-during-transient-collapse ()
   "Do not reposition using pixel geometry that looks like the GTK3 collapse.
 
 Regression test: `frame-pixel-width'/`frame-pixel-height' read right after
@@ -113,17 +132,12 @@ if still needed)."
               ((symbol-function 'display-graphic-p) (lambda (_) t))
               ((symbol-function 'frame-parameter) (lambda (_ _p) nil))
               ((symbol-function 'frame-monitor-workarea) (lambda (_) '(0 0 1920 1080)))
-              ((symbol-function 'frame-char-width) (lambda (_) 10))
-              ((symbol-function 'frame-char-height) (lambda (_) 20))
-              ((symbol-function 'frame-width) (lambda (_) 140))
-              ((symbol-function 'frame-height) (lambda (_) 42))
               ((symbol-function 'frame-pixel-width) (lambda (_) 200))
               ((symbol-function 'frame-pixel-height) (lambda (_) 200))
               ((symbol-function 'frame-position) (lambda (_) '(1700 . 900)))
-              ((symbol-function 'set-frame-size) (lambda (&rest _) nil))
               ((symbol-function 'set-frame-position)
                (lambda (&rest args) (push args reposition-calls))))
-      (neo/ensure-frame-onscreen-and-usable frame)
+      (neo/reposition-frame-onscreen frame)
       (should-not reposition-calls))))
 
 (provide 'neo-early-init-utils-test)
