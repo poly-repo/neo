@@ -53,6 +53,14 @@ This variable is used by `neo/paraphenalia` to determine visibility of UI compon
 ;; and require above, hence its placement here rather than at the top.
 (setq native-comp-async-report-warnings-errors neo/debug-p)
 
+;; Keep the echo area silent during startup (extension loading, manifest
+;; fetches, etc. all call `message'); messages still land in *Messages* for
+;; later inspection, they just don't flicker across the minibuffer while
+;; booting. Left alone when debugging the init sequence, since neo/debug-p
+;; already means "be verbose".
+(setq inhibit-message (not neo/debug-p))
+(add-hook 'emacs-startup-hook (lambda () (setq inhibit-message nil)))
+
 (eval-and-compile
   (defvar neo/cache-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CACHE_HOME") "~/.cache")))
   (defvar neo/config-directory (expand-file-name (neo/get-emacs-instance-name) (or (getenv "XDG_CONFIG_HOME") "~/.config")))
