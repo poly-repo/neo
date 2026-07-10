@@ -165,5 +165,28 @@ if still needed)."
       (neo/reposition-frame-onscreen frame)
       (should-not reposition-calls))))
 
+(ert-deftest neo/start-configuration-seeds-only-extension-manager ()
+  "`Start configuration' must boot into just the extension manager.
+
+Regression test: an earlier version of this function also seeded
+`neo:dashboard' directly, so it (and the `neo:projects'/`perspective' it
+requires) loaded on the very next boot too -- racing the one-shot
+`neo/manager--maybe-launch-on-startup' launch and displacing the Extension
+Manager with the dashboard once the idle-timer-driven post-restore hook
+fired. `neo:dashboard' is pre-selected instead from inside
+`neo/manager--maybe-launch-on-startup' itself (see
+extensions/extensions/neo/extension-manager/neo-extension-manager.el),
+which runs after bootstrap has already completed for this boot, so it only
+persists the choice for the boot after this one -- no race."
+  (let (set-calls restart-called)
+    (cl-letf (((symbol-function 'require) (lambda (feature &rest _) feature))
+              ((symbol-function 'neo/set-config)
+               (lambda (key value) (push (cons key value) set-calls)))
+              ((symbol-function 'restart-emacs) (lambda () (setq restart-called t))))
+      (neo/start-configuration nil)
+      (should (equal (cdr (assoc "enabled-extensions" set-calls))
+                      "(\"neo:extension-manager\")"))
+      (should restart-called))))
+
 (provide 'neo-early-init-utils-test)
 ;;; neo-early-init-utils-test.el ends here
