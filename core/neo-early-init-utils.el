@@ -563,18 +563,29 @@ frame walk."
        (t (set-frame-size frame neo/default-frame-width neo/default-frame-height))))))
 
 (defun neo/apply-restored-frame-geometry (&optional frame)
-  "Repair a collapsed FRAME once, then reposition it on-screen if needed.
-Runs exactly once per frame (see `neo--defer-apply-restored-frame-geometry'):
-no retry timers, no reactive re-checking.  The collapse this repairs never
-self-corrects once it happens (see `neo--repair-collapsed-frame'), so a
-single correct, deferred pass is sufficient -- retrying or reacting to
-further size-change events only produced extra, visible resizes during
-startup for no benefit, including forcing a legitimately smaller saved
-size back up to the NEO default on every launch (that unconditional floor
-is `neo/ensure-frame-onscreen-and-usable', which is deliberately NOT used
-here; see its docstring)."
-  (neo--repair-collapsed-frame frame)
-  (neo/reposition-frame-onscreen frame))
+  "Repair a collapsed FRAME once.  Runs exactly once per frame (see
+`neo--defer-apply-restored-frame-geometry'): no retry timers, no reactive
+re-checking.  The collapse this repairs never self-corrects once it
+happens (see `neo--repair-collapsed-frame'), so a single correct, deferred
+pass is sufficient -- retrying or reacting to further size-change events
+only produced extra, visible resizes during startup for no benefit,
+including forcing a legitimately smaller saved size back up to the NEO
+default on every launch (that unconditional floor is
+`neo/ensure-frame-onscreen-and-usable', which is deliberately NOT used
+here; see its docstring).
+
+Deliberately does NOT reposition.  `frame-position' immediately after
+creation is just as unreliable as pixel size on this GTK3 build -- even
+deferred by a tick, it can still read a transient/incomplete value from
+before the window manager finished placing the frame, and computing an
+on-screen offset from that is what pushed the frame into the bottom-right
+corner even after the size-collapse case was fixed.  The window manager is
+trusted to place the frame, same as position is never saved/restored for
+this exact reason (see `neo/ensure-frame-size-floor').
+`neo/reposition-frame-onscreen' remains available for callers where
+geometry has had time to settle (e.g. `neo/ensure-frame-onscreen-and-usable',
+invoked well after startup)."
+  (neo--repair-collapsed-frame frame))
 
 (defun neo--defer-apply-restored-frame-geometry (frame)
   "Run `neo/apply-restored-frame-geometry' on FRAME after this tick.

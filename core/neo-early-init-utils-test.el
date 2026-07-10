@@ -113,6 +113,31 @@ below the true collapse threshold (`neo/minimum-frame-cols'/
       (neo/apply-restored-frame-geometry frame)
       (should-not resize-calls))))
 
+(ert-deftest neo/apply-restored-frame-geometry-never-repositions ()
+  "The frame-creation repair must never reposition the frame.
+
+Regression test: `frame-position' immediately after creation is just as
+unreliable as pixel size on this GTK3 build -- even deferred by a command
+loop tick, it can still read a transient/incomplete value from before the
+window manager finished placing the frame.  Computing an on-screen offset
+from that bogus position is what pushed the frame into the bottom-right
+corner even after the size-collapse case was fixed (i.e. even when
+`neo--repair-collapsed-frame' correctly leaves the frame untouched).  The
+window manager is trusted to place the frame at creation time, same as
+position is never saved/restored across launches."
+  (let ((frame 'fake-frame)
+        (reposition-calls nil))
+    (cl-letf (((symbol-function 'frame-live-p) (lambda (_) t))
+              ((symbol-function 'display-graphic-p) (lambda (_) t))
+              ((symbol-function 'frame-parameter) (lambda (_ _p) nil))
+              ((symbol-function 'frame-width) (lambda (_) 100))
+              ((symbol-function 'frame-height) (lambda (_) 30))
+              ((symbol-function 'set-frame-size) (lambda (&rest _) nil))
+              ((symbol-function 'set-frame-position)
+               (lambda (&rest args) (push args reposition-calls))))
+      (neo/apply-restored-frame-geometry frame)
+      (should-not reposition-calls))))
+
 (ert-deftest neo/reposition-frame-onscreen-skips-during-transient-collapse ()
   "Do not reposition using pixel geometry that looks like the GTK3 collapse.
 
