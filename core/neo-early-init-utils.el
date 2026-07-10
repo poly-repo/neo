@@ -193,7 +193,15 @@ Persists `enabled-extensions' as just `(\"neo:extension-manager\")' -- that
 extension has no `:requires' of its own, so it loads standalone -- and sets a
 one-shot `\"launch-extensions-manager-on-startup\"' flag that
 `neo/manager--maybe-launch-on-startup' (in the extension-manager extension)
-consumes on the next boot to open the manager instead of a blank buffer."
+consumes on the next boot to open the manager instead of a blank buffer.
+
+Deliberately does NOT also enable `neo:dashboard' here: doing so would load
+it (and the `neo:projects'/`perspective' it requires) on this very next
+boot, racing the one-shot manager launch and displacing it as soon as the
+dashboard's own post-restore idle timer fires.  `neo/manager--maybe-launch-
+on-startup' pre-selects `neo:dashboard' itself, after the manager is
+already on screen, so it only takes effect starting the boot *after* this
+one -- see that function for why."
   (require 'neo-config)
   (neo/set-config "enabled-extensions" "(\"neo:extension-manager\")")
   (neo/set-config "pretend-new-user" "nil")
