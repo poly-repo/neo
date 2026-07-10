@@ -53,5 +53,21 @@
       (when (advice-member-p #'neo--custom-save-all-disabled 'custom-save-all)
         (advice-remove 'custom-save-all #'neo--custom-save-all-disabled)))))
 
+(ert-deftest neo/frame-collapse-repair-hooks-install-from-core-alone ()
+  "The collapsed-frame repair must be active without loading `neo-ui-frame'.
+
+Regression test: this repair used to live only in the neo:ui extension, so
+boots that never load it -- the first-run splash screen and the
+extension-manager-only restart from `neo/start-configuration' -- never
+installed the repair hooks, letting a collapsed ~200x200px frame go
+unrepaired.  `neo-early-init-utils' is required unconditionally by
+early-init.el, so its hooks must be present as soon as this file loads,
+with no dependency on neo:ui."
+  (should (memq #'neo/apply-restored-frame-geometry emacs-startup-hook))
+  (should (memq #'neo/ensure-frame-onscreen-and-usable after-make-frame-functions))
+  (should (memq #'neo/save-initial-frame-properties kill-emacs-hook))
+  (should (fboundp 'neo--repair-collapsed-frame))
+  (should (not (featurep 'neo-ui-frame))))
+
 (provide 'neo-early-init-utils-test)
 ;;; neo-early-init-utils-test.el ends here
