@@ -9,6 +9,14 @@
   "Return FILE contents as a raw string suitable for embedding in Emacs Lisp."
   (when (file-exists-p file)
     (with-temp-buffer
+      ;; Must be unibyte before inserting: on a multibyte buffer, bytes
+      ;; >= 128 (ubiquitous in compressed PNG data) get re-encoded as
+      ;; Emacs's internal 2-byte "raw 8-bit" representation, so
+      ;; `buffer-string' silently returns more bytes than the file
+      ;; actually has. `create-image' (and the PNG decoder underneath)
+      ;; reads exactly `string-bytes' worth of data, so that mismatch
+      ;; corrupts every image and it fails to decode.
+      (set-buffer-multibyte nil)
       (insert-file-contents-literally file)
       (buffer-string))))  ;; return raw string, no quoting here
 
