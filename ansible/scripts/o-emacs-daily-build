@@ -10,8 +10,12 @@
 #     fires before noon defers to the noon entry, while a boot *after* noon
 #     (the machine was off at noon) catches the missed build up.
 #
-# Usage: o-emacs-daily-build [REPO_DIR]
-#   REPO_DIR defaults to the git repo this script lives in.
+# Usage: o-emacs-daily-build [ANSIBLE_ROOT_DIR]
+#   ANSIBLE_ROOT_DIR is the directory holding playbooks/ and roles/ (e.g.
+#   infra/ansible in the omega monorepo, or ansible in a standalone ~/neo
+#   checkout). Defaults to the parent of this script's own directory, since
+#   this script always lives at <ansible-root>/scripts/o-emacs-daily-build
+#   regardless of which layout it is running from.
 #
 # Environment:
 #   EMACS_DAILY_HOUR     scheduled hour 0-23 (default 12)
@@ -25,19 +29,24 @@ ANSIBLE_PLAYBOOK="${ANSIBLE_PLAYBOOK:-ansible-playbook}"
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
-# Resolve the tree root that holds ansible.cfg and infra/ansible/. In the repo
-# that is the git toplevel; in a standalone install (o-emacs-daily-cron copies
-# the tree under e.g. ~/.local/emacs-cron, mirroring the repo layout) there is
-# no .git, so fall back to three levels up from this script
-# (…/infra/ansible/scripts → root).
-if [[ -n "${1:-}" ]]; then
-    repo="$1"
-else
-    repo=$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)
-    if [[ -z "$repo" ]]; then
-        repo=$(cd -- "$script_dir/../../.." && pwd)
+# This script always lives at <ansible_root>/scripts/, whether ansible_root is
+# infra/ansible (omega monorepo) or ansible (standalone ~/neo checkout), so
+# its parent is always the right root without needing to know which name it
+# has.
+ansible_root="${1:-$(dirname "$script_dir")}"
+
+# ansible.cfg lives above ansible_root, but at a different depth depending on
+# the layout (repo-root/infra/ansible vs. repo-root/ansible), so walk up
+# looking for it instead of assuming a fixed number of levels.
+config_root=""
+dir="$ansible_root"
+while [[ "$dir" != "/" ]]; do
+    if [[ -f "$dir/ansible.cfg" ]]; then
+        config_root="$dir"
+        break
     fi
-fi
+    dir=$(dirname "$dir")
+done
 
 log() {
     printf '%s o-emacs-daily-build: %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"
@@ -58,12 +67,12 @@ if (( 10#$(date +%H) < 10#$HOUR )); then
     exit 0
 fi
 
-if [[ -z "$repo" ]]; then
-    log "ERROR: could not determine repository root; pass REPO_DIR explicitly"
+if [[ -z "$config_root" ]]; then
+    log "ERROR: could not locate ansible.cfg above $ansible_root; pass ANSIBLE_ROOT_DIR explicitly"
     exit 1
 fi
 
-playbook="$repo/infra/ansible/playbooks/emacs/emacs.yaml"
+playbook="$ansible_root/playbooks/emacs/emacs.yaml"
 if [[ ! -f "$playbook" ]]; then
     log "ERROR: playbook not found at $playbook"
     exit 1
@@ -75,5 +84,5 @@ if [[ -n "${EMACS_DAILY_DRY_RUN:-}" ]]; then
 fi
 
 log "building today's master daily ($today)"
-cd "$repo"
+export ANSIBLE_CONFIG="$config_root/ansible.cfg"
 exec "$ANSIBLE_PLAYBOOK" "$playbook" -e emacs_version_name=master

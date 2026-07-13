@@ -17,11 +17,12 @@
 # Why a prefix copy: the daily build is driven from a checkout that may be an
 # ephemeral git worktree, moved, or deleted. If the crontab pointed straight at
 # the checkout, the job would break the moment that path went away. So `install`
-# copies the *runtime closure* — the repo-root ansible.cfg plus the whole
-# infra/ansible/ tree — into $EMACS_DAILY_PREFIX, mirroring the repo layout, and
-# points the crontab at that self-contained copy. Re-running `install` refreshes
-# the copy from the current checkout. The Emacs build itself fetches its sources
-# from GNU upstreams, so the ansible tree is the complete closure.
+# copies the *runtime closure* — the repo-root ansible.cfg plus the ansible
+# tree (`infra/ansible` in the omega monorepo, or top-level `ansible` in a
+# standalone ~/neo checkout) — into $EMACS_DAILY_PREFIX/ansible, and points the
+# crontab at that self-contained copy. Re-running `install` refreshes the copy
+# from the current checkout. The Emacs build itself fetches its sources from
+# GNU upstreams, so the ansible tree is the complete closure.
 #
 # The managed block has two entries, both calling the installed o-emacs-daily-build:
 #   0 <HOUR> * * *   the normal daily build at noon
@@ -44,6 +45,18 @@ action="${1:-install}"
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
+# Find the ansible tree within a checkout: 'infra/ansible' in the omega
+# monorepo, or top-level 'ansible' in a standalone ~/neo checkout. Echoes the
+# tree's path, or nothing if the checkout has neither.
+find_ansible_dir() {
+    local repo="$1"
+    if [[ -f "$repo/infra/ansible/scripts/o-emacs-daily-build" ]]; then
+        echo "$repo/infra/ansible"
+    elif [[ -f "$repo/ansible/scripts/o-emacs-daily-build" ]]; then
+        echo "$repo/ansible"
+    fi
+}
+
 # Resolve the source checkout to copy from. Prefer the checkout the user is
 # standing in (cwd) so `install` run inside an omega repo copies *that* repo's
 # working tree — uncommitted edits included — even when a different omega
@@ -51,24 +64,27 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # this script lives in.
 cwd_repo=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)
 src_repo=$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)
-if [[ -n "$cwd_repo" && -f "$cwd_repo/infra/ansible/scripts/o-emacs-daily-build" ]]; then
+if [[ -n "$cwd_repo" && -n "$(find_ansible_dir "$cwd_repo")" ]]; then
     repo="$cwd_repo"
 else
     repo="$src_repo"
 fi
 
 # Runtime closure, resolved against the installed prefix (not the checkout).
-installed_worker="$PREFIX/infra/ansible/scripts/o-emacs-daily-build"
+# Always copied to a canonical 'ansible' subdirectory regardless of the
+# source tree's name (infra/ansible vs. ansible) — see install_files().
+installed_worker="$PREFIX/ansible/scripts/o-emacs-daily-build"
 
 begin="# >>> o-emacs-daily (managed by o-emacs-daily-cron) >>>"
 end="# <<< o-emacs-daily (managed by o-emacs-daily-cron) <<<"
 log_file="$HOME/.cache/emacs-daily-cron.log"
 ansible_bin=$(command -v ansible-playbook || true)
 
-# Bake the resolved ansible-playbook path, scheduled hour, and install prefix
-# into the entries so cron's minimal PATH still finds the tools at run time and
-# the worker resolves ansible.cfg/roles from the self-contained copy.
-build_cmd="EMACS_DAILY_HOUR=$HOUR ANSIBLE_PLAYBOOK='${ansible_bin:-ansible-playbook}' '$installed_worker' '$PREFIX' >> '$log_file' 2>&1"
+# Bake the resolved ansible-playbook path and scheduled hour into the entries
+# so cron's minimal PATH still finds the tools at run time. The worker
+# derives its own ansible_root/ansible.cfg from its installed location, so no
+# prefix needs to be passed explicitly.
+build_cmd="EMACS_DAILY_HOUR=$HOUR ANSIBLE_PLAYBOOK='${ansible_bin:-ansible-playbook}' '$installed_worker' >> '$log_file' 2>&1"
 
 managed_block() {
     cat <<EOF
@@ -81,31 +97,34 @@ $end
 EOF
 }
 
-# Copy the runtime closure into $PREFIX, mirroring the repo layout so the
-# repo-root ansible.cfg's relative roles_path/inventory keep resolving.
+# Copy the runtime closure into $PREFIX/ansible (+ $PREFIX/ansible.cfg),
+# regardless of whether the source tree is infra/ansible (omega monorepo) or
+# ansible (standalone ~/neo checkout) — the worker only cares that scripts/ is
+# its own tree's direct child, not what the tree itself is called.
 install_files() {
     if [[ -z "$repo" ]]; then
-        echo "Error: not inside the omega checkout; cannot locate files to install." >&2
+        echo "Error: not inside an omega/neo checkout; cannot locate files to install." >&2
         exit 1
     fi
-    if [[ ! -f "$repo/ansible.cfg" || ! -f "$repo/infra/ansible/scripts/o-emacs-daily-build" ]]; then
-        echo "Error: $repo does not look like an omega checkout (missing ansible.cfg or the build script)." >&2
+    src_ansible=$(find_ansible_dir "$repo")
+    if [[ ! -f "$repo/ansible.cfg" || -z "$src_ansible" ]]; then
+        echo "Error: $repo does not look like an omega/neo checkout (missing ansible.cfg or the build script)." >&2
         exit 1
     fi
     # Copying the working tree, so uncommitted edits are included; say so, and
     # flag a dirty tree so it is obvious which state is being installed.
     echo "Copying build tree from working copy at $repo"
-    if [[ -n "$(git -C "$repo" status --porcelain -- ansible.cfg infra/ansible 2>/dev/null)" ]]; then
-        echo "  (working tree has uncommitted changes under ansible.cfg/infra/ansible — installing those too)"
+    if [[ -n "$(git -C "$repo" status --porcelain -- ansible.cfg infra/ansible ansible 2>/dev/null)" ]]; then
+        echo "  (working tree has uncommitted changes under ansible.cfg/ansible — installing those too)"
     fi
-    mkdir -p "$PREFIX/infra/ansible"
+    mkdir -p "$PREFIX/ansible"
     if command -v rsync >/dev/null 2>&1; then
-        rsync -a --delete "$repo/infra/ansible/" "$PREFIX/infra/ansible/"
+        rsync -a --delete "$src_ansible/" "$PREFIX/ansible/"
         rsync -a "$repo/ansible.cfg" "$PREFIX/ansible.cfg"
     else
-        rm -rf "$PREFIX/infra/ansible"
-        mkdir -p "$PREFIX/infra/ansible"
-        cp -a "$repo/infra/ansible/." "$PREFIX/infra/ansible/"
+        rm -rf "$PREFIX/ansible"
+        mkdir -p "$PREFIX/ansible"
+        cp -a "$src_ansible/." "$PREFIX/ansible/"
         cp -a "$repo/ansible.cfg" "$PREFIX/ansible.cfg"
     fi
 }
@@ -128,7 +147,7 @@ case "$action" in
         if [[ "${2:-}" == "--purge" ]]; then
             # Only remove a prefix that looks like one we created.
             if [[ -f "$installed_worker" ]]; then
-                rm -rf "$PREFIX/infra" "$PREFIX/ansible.cfg"
+                rm -rf "$PREFIX/ansible" "$PREFIX/ansible.cfg"
                 rmdir "$PREFIX" 2>/dev/null || true
                 echo "Purged installed files under $PREFIX."
             else

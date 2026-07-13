@@ -43,8 +43,8 @@ If SYNC is non-nil, wait for the process to finish before returning."
 
 (cl-defun neo/execute-with-venv (command &key args venv-path env on-success on-error buffer-name (show-buffer t) sync)
   "Execute COMMAND inside a Python virtual environment.
-VENV-PATH defaults to .python inside `user-emacs-directory`."
-  (let* ((venv (or venv-path (expand-file-name ".python" user-emacs-directory)))
+VENV-PATH defaults to .neo-python inside `user-emacs-directory`."
+  (let* ((venv (or venv-path (expand-file-name ".neo-python" user-emacs-directory)))
          (bin-dir (expand-file-name "bin" venv))
          (python-exec (expand-file-name "python" bin-dir))
          ;; Standard venv environment variables
