@@ -22,7 +22,12 @@
 # standalone ~/neo checkout) — into $EMACS_DAILY_PREFIX/ansible, and points the
 # crontab at that self-contained copy. Re-running `install` refreshes the copy
 # from the current checkout. The Emacs build itself fetches its sources from
-# GNU upstreams, so the ansible tree is the complete closure.
+# GNU upstreams, so the ansible tree is the complete closure. For the same
+# reason, `install` never bakes in an ansible-playbook that lives inside the
+# checkout (e.g. a venv under ~/neo/.neo-python): if no system-wide
+# ansible-playbook is found, it sets up its own private venv under
+# $EMACS_DAILY_PREFIX/.venv instead, so the cron job's ansible dependency is
+# just as independent of the checkout as everything else it touches.
 #
 # The managed block has two entries, both calling the installed o-emacs-daily-build:
 #   0 <HOUR> * * *   the normal daily build at noon
@@ -97,12 +102,48 @@ installed_worker="$PREFIX/ansible/scripts/o-emacs-daily-build"
 begin="# >>> o-emacs-daily (managed by o-emacs-daily-cron) >>>"
 end="# <<< o-emacs-daily (managed by o-emacs-daily-cron) <<<"
 log_file="$HOME/.cache/emacs-daily-cron.log"
-ansible_bin=$(command -v ansible-playbook || true)
+
+# Resolve an ansible-playbook to bake into the crontab entry. Prefers a
+# system-wide install; otherwise sets up (or reuses) a private venv under
+# $PREFIX/.venv, so the daily cron job never depends on ansible-playbook
+# living inside the checkout (which $PREFIX exists specifically to survive
+# the deletion of). Only called from the install path -- `show`/`remove`
+# don't need this and mustn't have the side effect of creating a venv.
+ensure_ansible_bin() {
+    local system_bin
+    system_bin=$(command -v ansible-playbook || true)
+    if [[ -n "$system_bin" ]]; then
+        echo "$system_bin"
+        return 0
+    fi
+    local venv_bin="$PREFIX/.venv/bin/ansible-playbook"
+    if [[ -x "$venv_bin" ]]; then
+        echo "$venv_bin"
+        return 0
+    fi
+    echo "No system-wide ansible-playbook found; installing one into $PREFIX/.venv..." >&2
+    if ! python3 -m venv "$PREFIX/.venv" >&2; then
+        echo "Error: 'python3 -m venv' failed (is the python3-venv package installed?)." >&2
+        exit 1
+    fi
+    if ! "$PREFIX/.venv/bin/pip" install --upgrade pip >&2; then
+        echo "Error: failed to upgrade pip in $PREFIX/.venv." >&2
+        exit 1
+    fi
+    if ! "$PREFIX/.venv/bin/pip" install ansible >&2; then
+        echo "Error: failed to install ansible into $PREFIX/.venv." >&2
+        exit 1
+    fi
+    echo "$venv_bin"
+}
 
 # Bake the resolved ansible-playbook path and scheduled hour into the entries
 # so cron's minimal PATH still finds the tools at run time. The worker
 # derives its own ansible_root/ansible.cfg from its installed location, so no
-# prefix needs to be passed explicitly.
+# prefix needs to be passed explicitly. This default (system PATH only) is
+# used for the `show` preview; `install` overwrites build_cmd after resolving
+# ansible_bin via ensure_ansible_bin, which may point into $PREFIX/.venv.
+ansible_bin=$(command -v ansible-playbook || true)
 build_cmd="EMACS_DAILY_HOUR=$HOUR ANSIBLE_PLAYBOOK='${ansible_bin:-ansible-playbook}' '$installed_worker' >> '$log_file' 2>&1"
 
 managed_block() {
@@ -171,7 +212,7 @@ case "$action" in
         if [[ "${2:-}" == "--purge" ]]; then
             # Only remove a prefix that looks like one we created.
             if [[ -f "$installed_worker" ]]; then
-                rm -rf "$PREFIX/ansible" "$PREFIX/ansible.cfg"
+                rm -rf "$PREFIX/ansible" "$PREFIX/ansible.cfg" "$PREFIX/.venv"
                 rmdir "$PREFIX" 2>/dev/null || true
                 echo "Purged installed files under $PREFIX."
             else
@@ -187,13 +228,13 @@ case "$action" in
             echo "Error: installed worker missing or not executable: $installed_worker" >&2
             exit 1
         fi
-        if [[ -z "$ansible_bin" ]]; then
-            echo "Warning: ansible-playbook not found on PATH; baking the literal name." >&2
-        fi
+        ansible_bin=$(ensure_ansible_bin)
+        build_cmd="EMACS_DAILY_HOUR=$HOUR ANSIBLE_PLAYBOOK='$ansible_bin' '$installed_worker' >> '$log_file' 2>&1"
         mkdir -p "$(dirname "$log_file")"
         { current_without_block; managed_block; } | crontab -
         echo "Installed build tree under $PREFIX (self-contained; independent of the checkout)."
         echo "Installed Emacs daily crontab block (build at ${HOUR}:00, catch-up @reboot)."
+        echo "Using ansible-playbook: $ansible_bin"
         echo "Logs: $log_file"
         echo "Reminder: the build uses sudo (ansible become); ensure passwordless sudo for unattended runs."
         ;;
