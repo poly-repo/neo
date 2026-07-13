@@ -57,6 +57,25 @@ find_ansible_dir() {
     fi
 }
 
+# The ansible.cfg to copy alongside the tree. install_files() always copies
+# the source ansible tree to the canonical $PREFIX/ansible/, so roles_path
+# and inventory must be written in terms of ./ansible/... to still resolve
+# there. In a standalone ~/neo checkout, $repo/ansible.cfg already says
+# that. In the omega monorepo, $repo/ansible.cfg instead says
+# ./infra/ansible/... (correct for the monorepo's own layout, wrong for the
+# copy) -- devex/editors/emacs/ansible.cfg is the one already written in
+# terms of ./ansible/..., since it's the exact file copybara publishes to
+# the standalone repo root.
+find_ansible_config() {
+    local repo="$1"
+    local src_ansible="$2"
+    if [[ "$src_ansible" == "$repo/infra/ansible" && -f "$repo/devex/editors/emacs/ansible.cfg" ]]; then
+        echo "$repo/devex/editors/emacs/ansible.cfg"
+    else
+        echo "$repo/ansible.cfg"
+    fi
+}
+
 # Resolve the source checkout to copy from. Prefer the checkout the user is
 # standing in (cwd) so `install` run inside an omega repo copies *that* repo's
 # working tree — uncommitted edits included — even when a different omega
@@ -107,25 +126,30 @@ install_files() {
         exit 1
     fi
     src_ansible=$(find_ansible_dir "$repo")
-    if [[ ! -f "$repo/ansible.cfg" || -z "$src_ansible" ]]; then
-        echo "Error: $repo does not look like an omega/neo checkout (missing ansible.cfg or the build script)." >&2
+    if [[ -z "$src_ansible" ]]; then
+        echo "Error: $repo does not look like an omega/neo checkout (missing the build script)." >&2
+        exit 1
+    fi
+    src_config=$(find_ansible_config "$repo" "$src_ansible")
+    if [[ ! -f "$src_config" ]]; then
+        echo "Error: $repo does not look like an omega/neo checkout (missing $src_config)." >&2
         exit 1
     fi
     # Copying the working tree, so uncommitted edits are included; say so, and
     # flag a dirty tree so it is obvious which state is being installed.
     echo "Copying build tree from working copy at $repo"
-    if [[ -n "$(git -C "$repo" status --porcelain -- ansible.cfg infra/ansible ansible 2>/dev/null)" ]]; then
+    if [[ -n "$(git -C "$repo" status --porcelain -- ansible.cfg infra/ansible ansible devex/editors/emacs/ansible.cfg 2>/dev/null)" ]]; then
         echo "  (working tree has uncommitted changes under ansible.cfg/ansible — installing those too)"
     fi
     mkdir -p "$PREFIX/ansible"
     if command -v rsync >/dev/null 2>&1; then
         rsync -a --delete "$src_ansible/" "$PREFIX/ansible/"
-        rsync -a "$repo/ansible.cfg" "$PREFIX/ansible.cfg"
+        rsync -a "$src_config" "$PREFIX/ansible.cfg"
     else
         rm -rf "$PREFIX/ansible"
         mkdir -p "$PREFIX/ansible"
         cp -a "$src_ansible/." "$PREFIX/ansible/"
-        cp -a "$repo/ansible.cfg" "$PREFIX/ansible.cfg"
+        cp -a "$src_config" "$PREFIX/ansible.cfg"
     fi
 }
 
