@@ -2,10 +2,13 @@
 # defaults file for emacs-install
 
 requested_emacs_version: ""
+emacs_git_repo_url: "https://github.com/emacs-mirror/emacs.git"
+emacs_build_root: "{{ ansible_user_dir }}/.cache/emacs-builds"
 
-# How many days of date-stamped daily "master" builds to keep under
+# Maximum number of days of date-stamped daily "master" builds to keep under
 # ~/.local, regardless of how many variants (e.g. -lucid, -gtk3) were built
 # on a given day. Older days (emacs-master-YYYY-MM-DD-*) are pruned after a
-# run, all their variants together. The undated legacy build
-# (emacs-master-<suffix>) is never touched.
+# run, all their variants together. If fewer than N days exist (for example on
+# a fresh system that has only built today), keep whatever exists. The undated
+# legacy build (emacs-master-<suffix>) is never touched.
 emacs_keep_daily_builds: 3

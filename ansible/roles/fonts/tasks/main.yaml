@@ -1,5 +1,13 @@
 ---
 
+- name: Install font downloader runtime dependencies
+  ansible.builtin.package:
+    name:
+      - python3-fonttools
+      - python3-requests
+    state: present
+  become: true
+
 - name: "Install fonts"
   include_tasks: "download_font_family.yaml"
   loop: "{{font_families}}"

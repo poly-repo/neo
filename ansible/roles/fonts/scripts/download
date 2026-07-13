@@ -29,7 +29,6 @@ import argparse
 import os
 import re
 import requests
-import wget
 import zipfile
 from urllib.parse import urlparse
 from os.path import splitext
@@ -62,15 +61,36 @@ from pathlib import Path
 # cp fonts/variable/*ttf ${HOME}/.fonts
 # rm -rf fonts
 
+NERD_FONT_ASSET_ALIASES = {
+    # Nerd Fonts v3.4.0 no longer publishes a standalone FontAwesome archive.
+    # The symbols now ship via the SymbolsOnly bundle instead.
+    'FontAwesome': 'NerdFontsSymbolsOnly',
+}
+
+def download_to_file(url, out_path):
+    response = requests.get(url, allow_redirects=True, stream=True)
+    response.raise_for_status()
+    with open(out_path, "wb") as f:
+        for chunk in response.iter_content(chunk_size=1024 * 64):
+            if chunk:
+                f.write(chunk)
+    return out_path
+
+
+def nerd_release_asset_name(family):
+    return NERD_FONT_ASSET_ALIASES.get(family, family)
+
 
 def nerd_download_family(family, font_dir):
     base_url = 'https://github.com/ryanoasis/nerd-fonts/releases/latest'
     response = requests.get(base_url)
     latest_version = response.url.rsplit('/', 1)[-1]
-    download_url = f"https://github.com/ryanoasis/nerd-fonts/releases/download/{latest_version}/{family}.zip"
-    response = wget.download(url=download_url, out=f"/tmp/{family}.zip",bar=None)
-    print(response)
-    zip_file = zipfile.ZipFile(f"/tmp/{family}.zip", "r")
+    asset_name = nerd_release_asset_name(family)
+    download_url = f"https://github.com/ryanoasis/nerd-fonts/releases/download/{latest_version}/{asset_name}.zip"
+    archive_path = f"/tmp/{asset_name}.zip"
+    download_to_file(download_url, archive_path)
+    print(archive_path)
+    zip_file = zipfile.ZipFile(archive_path, "r")
     [zip_file.extract(file, font_dir) for file in zip_file.namelist() if file.endswith(('.ttf', '.otf'))]
     zip_file.close()
     
@@ -135,8 +155,8 @@ def google_download_variant(family, weight, variant, url, font_dir, rename_to=No
     path = urlparse(url).path
     ext = splitext(path)[1]
     out_path = os.path.join(font_dir, f"{family}-{variant}{ext}")
-    response = wget.download(url=url, out=out_path, bar=None)
-    print(response)
+    download_to_file(url, out_path)
+    print(out_path)
     if rename_to:
         rename_font_family(out_path, rename_to, variant)
 
@@ -153,8 +173,8 @@ def google_download_family(family, font_dir):
         url = f'{base_url}?family={family}:wght@{weights}&display=swap'
     r = requests.get(url, allow_redirects=True)
 
-    weight_re = re.compile("^\s*font-weight:\s*(?P<weight>[0-9]+);.*$")
-    url_re = re.compile("^\s*src: url\((?P<url>[^)]+)\).*$")
+    weight_re = re.compile(r"^\s*font-weight:\s*(?P<weight>[0-9]+);.*$")
+    url_re = re.compile(r"^\s*src: url\((?P<url>[^)]+)\).*$")
 
     variant_weight = None
     variant_url = None

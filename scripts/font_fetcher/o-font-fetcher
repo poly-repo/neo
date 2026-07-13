@@ -16,23 +16,31 @@ STYLES = {
     500: 'Medium', 600: 'SemiBold', 700: 'Bold', 800: 'ExtraBold', 900: 'Black',
 }
 
+NERD_FONT_ASSET_ALIASES = {
+    # Nerd Fonts v3.4.0 no longer publishes a standalone FontAwesome archive.
+    # The symbols now ship via the SymbolsOnly bundle instead.
+    'FontAwesome': 'NerdFontsSymbolsOnly',
+}
+
+def nerd_release_asset_name(family):
+    return NERD_FONT_ASSET_ALIASES.get(family, family)
+
 def nerd_download_family(family, font_dir):
     print(f"[*] Fetching Nerd Font: {family}...")
     base_url = 'https://github.com/ryanoasis/nerd-fonts/releases/latest'
     try:
         head = requests.head(base_url, allow_redirects=True, timeout=10)
         latest_version = head.url.rsplit('/', 1)[-1]
-        
-        # Note: Nerd Fonts are case-sensitive and specific. 
-        # 'FontAwesome' might need to be 'FontLogos' or similar in newer versions.
-        download_url = f"https://github.com/ryanoasis/nerd-fonts/releases/download/{latest_version}/{family}.zip"
+
+        asset_name = nerd_release_asset_name(family)
+        download_url = f"https://github.com/ryanoasis/nerd-fonts/releases/download/{latest_version}/{asset_name}.zip"
         r = requests.get(download_url, timeout=20)
         
         if r.status_code == 404:
-            print(f"  [!] ERROR: '{family}.zip' not found. Check https://github.com/ryanoasis/nerd-fonts/releases")
+            print(f"  [!] ERROR: '{asset_name}.zip' not found. Check https://github.com/ryanoasis/nerd-fonts/releases")
             return False
 
-        tmp_zip = f"/tmp/{family}.zip"
+        tmp_zip = f"/tmp/{asset_name}.zip"
         with open(tmp_zip, 'wb') as f:
             f.write(r.content)
 
