@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# -*- shell-script -*-
+# Build today's Emacs "master" daily unless it already exists.
+#
+# This is the gating wrapper invoked from cron (see o-emacs-daily-cron). It
+# gives plain crontab an anacron-like catch-up:
+#   - skips when today's build directory already exists (the build is
+#     date-stamped and idempotent, so repeated runs are cheap no-ops);
+#   - only builds once the scheduled hour has passed, so an @reboot run that
+#     fires before noon defers to the noon entry, while a boot *after* noon
+#     (the machine was off at noon) catches the missed build up.
+#
+# Usage: o-emacs-daily-build [ANSIBLE_ROOT_DIR]
+#   ANSIBLE_ROOT_DIR is the directory holding playbooks/ and roles/ (e.g.
+#   infra/ansible in the omega monorepo, or ansible in a standalone ~/neo
+#   checkout). Defaults to the parent of this script's own directory, since
+#   this script always lives at <ansible-root>/scripts/o-emacs-daily-build
+#   regardless of which layout it is running from.
+#
+# Environment:
+#   EMACS_DAILY_HOUR     scheduled hour 0-23 (default 12)
+#   ANSIBLE_PLAYBOOK     ansible-playbook executable (default "ansible-playbook")
+#   EMACS_DAILY_DRY_RUN  when set, report the decision instead of building
+
+set -euo pipefail
+
+HOUR="${EMACS_DAILY_HOUR:-12}"
+ANSIBLE_PLAYBOOK="${ANSIBLE_PLAYBOOK:-ansible-playbook}"
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
+# This script always lives at <ansible_root>/scripts/, whether ansible_root is
+# infra/ansible (omega monorepo) or ansible (standalone ~/neo checkout), so
+# its parent is always the right root without needing to know which name it
+# has.
+ansible_root="${1:-$(dirname "$script_dir")}"
+
+# ansible.cfg lives above ansible_root, but at a different depth depending on
+# the layout (repo-root/infra/ansible vs. repo-root/ansible), so walk up
+# looking for it instead of assuming a fixed number of levels.
+config_root=""
+dir="$ansible_root"
+while [[ "$dir" != "/" ]]; do
+    if [[ -f "$dir/ansible.cfg" ]]; then
+        config_root="$dir"
+        break
+    fi
+    dir=$(dirname "$dir")
+done
+
+log() {
+    printf '%s o-emacs-daily-build: %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"
+}
+
+today=$(date +%F)
+
+# Already built today? Nothing to do.
+if compgen -G "$HOME/.local/emacs-master-${today}-*" >/dev/null 2>&1; then
+    log "today's build (emacs-master-${today}-*) already present; nothing to do"
+    exit 0
+fi
+
+# Before the scheduled hour with no build yet: let the timed entry handle it.
+# 10# forces base-10 so "09" is not misread as octal.
+if (( 10#$(date +%H) < 10#$HOUR )); then
+    log "before scheduled hour ${HOUR}:00 and no build yet; deferring to the timed run"
+    exit 0
+fi
+
+if [[ -z "$config_root" ]]; then
+    log "ERROR: could not locate ansible.cfg above $ansible_root; pass ANSIBLE_ROOT_DIR explicitly"
+    exit 1
+fi
+
+playbook="$ansible_root/playbooks/emacs/emacs.yaml"
+if [[ ! -f "$playbook" ]]; then
+    log "ERROR: playbook not found at $playbook"
+    exit 1
+fi
+
+if [[ -n "${EMACS_DAILY_DRY_RUN:-}" ]]; then
+    log "DRY RUN: would build today's master daily via $playbook"
+    exit 0
+fi
+
+log "building today's master daily ($today)"
+export ANSIBLE_CONFIG="$config_root/ansible.cfg"
+exec "$ANSIBLE_PLAYBOOK" "$playbook" -e emacs_version_name=master

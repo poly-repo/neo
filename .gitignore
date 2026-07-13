@@ -20,4 +20,4 @@ assets/hacker.png
 .neo-wizard/
 
 # The python virtual environment used by scripts used by Emacs
-.python
+.neo-python

@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# -*- shell-script -*-
+# Install (or remove) a crontab entry that builds the Emacs "master" daily at
+# noon, with offline catch-up the next time the machine is powered on.
+#
+# Usage:
+#   o-emacs-daily-cron [install]   copy the build tree into the prefix and
+#                                  add/refresh the managed crontab block (default)
+#   o-emacs-daily-cron remove      remove the managed crontab block (and, with
+#                                  --purge, the installed prefix)
+#   o-emacs-daily-cron show        print the managed crontab block (no changes)
+#
+# Environment:
+#   EMACS_DAILY_HOUR     scheduled hour 0-23 (default 12)
+#   EMACS_DAILY_PREFIX   install prefix (default ~/.local/emacs-cron)
+#
+# Why a prefix copy: the daily build is driven from a checkout that may be an
+# ephemeral git worktree, moved, or deleted. If the crontab pointed straight at
+# the checkout, the job would break the moment that path went away. So `install`
+# copies the *runtime closure* — the repo-root ansible.cfg plus the ansible
+# tree (`infra/ansible` in the omega monorepo, or top-level `ansible` in a
+# standalone ~/neo checkout) — into $EMACS_DAILY_PREFIX/ansible, and points the
+# crontab at that self-contained copy. Re-running `install` refreshes the copy
+# from the current checkout. The Emacs build itself fetches its sources from
+# GNU upstreams, so the ansible tree is the complete closure.
+#
+# The managed block has two entries, both calling the installed o-emacs-daily-build:
+#   0 <HOUR> * * *   the normal daily build at noon
+#   @reboot          catch-up: a stock crontab does NOT run jobs missed while
+#                    the machine was off, so this fires on the next boot. The
+#                    worker only builds when the scheduled hour has passed and
+#                    today's build is missing, so an early boot defers to the
+#                    timed entry and a late boot builds the missed daily.
+#
+# NOTE: the build runs `make install` under ansible `become: true`, so the
+# crontab user needs passwordless sudo for unattended runs to succeed.
+# Catch-up covers power-off (via @reboot); it does not cover suspend/resume.
+# For that, prefer a systemd user timer with `Persistent=true`.
+
+set -euo pipefail
+
+HOUR="${EMACS_DAILY_HOUR:-12}"
+PREFIX="${EMACS_DAILY_PREFIX:-$HOME/.local/emacs-cron}"
+action="${1:-install}"
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
+# Find the ansible tree within a checkout: 'infra/ansible' in the omega
+# monorepo, or top-level 'ansible' in a standalone ~/neo checkout. Echoes the
+# tree's path, or nothing if the checkout has neither.
+find_ansible_dir() {
+    local repo="$1"
+    if [[ -f "$repo/infra/ansible/scripts/o-emacs-daily-build" ]]; then
+        echo "$repo/infra/ansible"
+    elif [[ -f "$repo/ansible/scripts/o-emacs-daily-build" ]]; then
+        echo "$repo/ansible"
+    fi
+}
+
+# Resolve the source checkout to copy from. Prefer the checkout the user is
+# standing in (cwd) so `install` run inside an omega repo copies *that* repo's
+# working tree — uncommitted edits included — even when a different omega
+# checkout's scripts/ dir shadows this one on PATH. Fall back to the checkout
+# this script lives in.
+cwd_repo=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)
+src_repo=$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || true)
+if [[ -n "$cwd_repo" && -n "$(find_ansible_dir "$cwd_repo")" ]]; then
+    repo="$cwd_repo"
+else
+    repo="$src_repo"
+fi
+
+# Runtime closure, resolved against the installed prefix (not the checkout).
+# Always copied to a canonical 'ansible' subdirectory regardless of the
+# source tree's name (infra/ansible vs. ansible) — see install_files().
+installed_worker="$PREFIX/ansible/scripts/o-emacs-daily-build"
+
+begin="# >>> o-emacs-daily (managed by o-emacs-daily-cron) >>>"
+end="# <<< o-emacs-daily (managed by o-emacs-daily-cron) <<<"
+log_file="$HOME/.cache/emacs-daily-cron.log"
+ansible_bin=$(command -v ansible-playbook || true)
+
+# Bake the resolved ansible-playbook path and scheduled hour into the entries
+# so cron's minimal PATH still finds the tools at run time. The worker
+# derives its own ansible_root/ansible.cfg from its installed location, so no
+# prefix needs to be passed explicitly.
+build_cmd="EMACS_DAILY_HOUR=$HOUR ANSIBLE_PLAYBOOK='${ansible_bin:-ansible-playbook}' '$installed_worker' >> '$log_file' 2>&1"
+
+managed_block() {
+    cat <<EOF
+$begin
+# Build the Emacs master daily at ${HOUR}:00.
+0 $HOUR * * * $build_cmd
+# Catch up a daily missed while powered off, on the next boot (after ${HOUR}:00).
+@reboot $build_cmd
+$end
+EOF
+}
+
+# Copy the runtime closure into $PREFIX/ansible (+ $PREFIX/ansible.cfg),
+# regardless of whether the source tree is infra/ansible (omega monorepo) or
+# ansible (standalone ~/neo checkout) — the worker only cares that scripts/ is
+# its own tree's direct child, not what the tree itself is called.
+install_files() {
+    if [[ -z "$repo" ]]; then
+        echo "Error: not inside an omega/neo checkout; cannot locate files to install." >&2
+        exit 1
+    fi
+    src_ansible=$(find_ansible_dir "$repo")
+    if [[ ! -f "$repo/ansible.cfg" || -z "$src_ansible" ]]; then
+        echo "Error: $repo does not look like an omega/neo checkout (missing ansible.cfg or the build script)." >&2
+        exit 1
+    fi
+    # Copying the working tree, so uncommitted edits are included; say so, and
+    # flag a dirty tree so it is obvious which state is being installed.
+    echo "Copying build tree from working copy at $repo"
+    if [[ -n "$(git -C "$repo" status --porcelain -- ansible.cfg infra/ansible ansible 2>/dev/null)" ]]; then
+        echo "  (working tree has uncommitted changes under ansible.cfg/ansible — installing those too)"
+    fi
+    mkdir -p "$PREFIX/ansible"
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --delete "$src_ansible/" "$PREFIX/ansible/"
+        rsync -a "$repo/ansible.cfg" "$PREFIX/ansible.cfg"
+    else
+        rm -rf "$PREFIX/ansible"
+        mkdir -p "$PREFIX/ansible"
+        cp -a "$src_ansible/." "$PREFIX/ansible/"
+        cp -a "$repo/ansible.cfg" "$PREFIX/ansible.cfg"
+    fi
+}
+
+# Print the current crontab with any previous managed block removed.
+current_without_block() {
+    crontab -l 2>/dev/null | awk -v b="$begin" -v e="$end" '
+        $0 == b { inblock = 1; next }
+        inblock && $0 == e { inblock = 0; next }
+        !inblock { print }'
+}
+
+case "$action" in
+    show)
+        managed_block
+        ;;
+    remove)
+        current_without_block | crontab -
+        echo "Removed managed Emacs daily crontab block."
+        if [[ "${2:-}" == "--purge" ]]; then
+            # Only remove a prefix that looks like one we created.
+            if [[ -f "$installed_worker" ]]; then
+                rm -rf "$PREFIX/ansible" "$PREFIX/ansible.cfg"
+                rmdir "$PREFIX" 2>/dev/null || true
+                echo "Purged installed files under $PREFIX."
+            else
+                echo "Nothing to purge: $installed_worker not found." >&2
+            fi
+        else
+            echo "Installed files left under $PREFIX (pass --purge to remove them)."
+        fi
+        ;;
+    install)
+        install_files
+        if [[ ! -x "$installed_worker" ]]; then
+            echo "Error: installed worker missing or not executable: $installed_worker" >&2
+            exit 1
+        fi
+        if [[ -z "$ansible_bin" ]]; then
+            echo "Warning: ansible-playbook not found on PATH; baking the literal name." >&2
+        fi
+        mkdir -p "$(dirname "$log_file")"
+        { current_without_block; managed_block; } | crontab -
+        echo "Installed build tree under $PREFIX (self-contained; independent of the checkout)."
+        echo "Installed Emacs daily crontab block (build at ${HOUR}:00, catch-up @reboot)."
+        echo "Logs: $log_file"
+        echo "Reminder: the build uses sudo (ansible become); ensure passwordless sudo for unattended runs."
+        ;;
+    *)
+        echo "Usage: $0 [install|remove [--purge]|show]" >&2
+        exit 1
+        ;;
+esac

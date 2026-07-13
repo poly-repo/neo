@@ -112,7 +112,9 @@
     requested_emacs_version: "{{ emacs_version_name | default('') }}"
 
   roles:
-    - { role: emacs-install, tags: ['slow'] }
+    # 'emacs' tag lets callers select only this role, e.g. --tags emacs, to
+    # build Emacs without also running the fonts role below.
+    - { role: emacs-install, tags: ['slow', 'emacs'] }
     # Font families come from the role's vars (roles/fonts/vars/main.yaml),
     # the single source of truth. Do not re-list them here as role params:
     # role params outrank role vars and would shadow edits to that file.
