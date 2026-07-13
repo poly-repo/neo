@@ -20,6 +20,9 @@
       - "full path: {{ font_base_directory }}/{{ source }}/{{ family }}"
 
 - name: "Download {{family}} [from {{source}} fonts]"
-  ansible.builtin.command:
-    cmd: "{{ role_path }}/scripts/download '{{ item }}' '{{ font_base_directory }}/{{ source }}/{{ family }}'"
+  ansible.builtin.script:
+    cmd: >-
+      {{ role_path }}/scripts/download
+      {{ item | quote }}
+      {{ font_base_directory | quote }}
   when: not font_dir.stat.exists

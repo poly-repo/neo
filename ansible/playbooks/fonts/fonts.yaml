@@ -10,17 +10,92 @@
 # Install the default font set:
 # ansible-playbook infra/ansible/playbooks/fonts/fonts.yaml
 #
+# Install the default font set on a VM from the host:
+# ansible-playbook infra/ansible/playbooks/fonts/fonts.yaml \
+#   -e target_vm=ubuntu
+#
 # The list of families lives in the role's vars (roles/fonts/vars/main.yaml),
 # which is the single source of truth. Override it for a one-off run with:
 # ansible-playbook infra/ansible/playbooks/fonts/fonts.yaml \
 #   -e '{"font_families": ["Hack:nerd", "Source Code Pro:google"]}'
 
 - hosts: localhost
-
+  gather_facts: false
   vars:
-    ansible_python_interpreter: /usr/bin/python3
-    home_dir: "{{ lookup('env', 'HOME') }}"
-    linux_user: "{{ lookup('env', 'USER') }}"
+    requested_target_vm: "{{ target_vm | default('') }}"
+    requested_target_host: "{{ target_host | default('127.0.0.1' if requested_target_vm | length > 0 else 'localhost') }}"
+    requested_target_connection: "{{ target_connection | default('') }}"
+    resolved_target_connection: >-
+      {{
+        requested_target_connection
+        if requested_target_connection | length > 0
+        else ('ssh' if requested_target_vm | length > 0 else ('local' if requested_target_host == 'localhost' else 'ssh'))
+      }}
+    resolved_target_name: "{{ 'localhost' if resolved_target_connection == 'local' else 'playbook-target' }}"
+    resolved_target_port: >-
+      {{
+        target_port
+        if target_port is defined
+        else (20000 + ((requested_target_vm | hash('md5')) | int(base=16) % 10000) if requested_target_vm | length > 0 else '')
+      }}
+    resolved_target_user: >-
+      {{
+        target_user
+        if target_user is defined
+        else (lookup('env', 'USER') if requested_target_vm | length > 0 else '')
+      }}
+    resolved_target_ssh_key: >-
+      {{
+        target_ssh_key
+        if target_ssh_key is defined
+        else (lookup('env', 'HOME') ~ '/.ssh/id_rsa' if requested_target_vm | length > 0 else '')
+      }}
+    resolved_target_ssh_common_args: >-
+      {{
+        target_ssh_common_args
+        if target_ssh_common_args is defined
+        else '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+      }}
+  tasks:
+    - name: Check target VM state
+      ansible.builtin.command: virsh domstate {{ requested_target_vm }}
+      register: target_vm_state
+      changed_when: false
+      when: requested_target_vm | length > 0
+
+    - name: Start target VM if needed
+      ansible.builtin.command: virsh start {{ requested_target_vm }}
+      when:
+        - requested_target_vm | length > 0
+        - target_vm_state is defined
+        - "'running' not in target_vm_state.stdout"
+
+    - name: Wait for target VM SSH port
+      ansible.builtin.wait_for:
+        host: "{{ requested_target_host }}"
+        port: "{{ resolved_target_port | int }}"
+        timeout: 120
+        delay: "{{ 30 if (target_vm_state is defined and 'running' not in target_vm_state.stdout) else 0 }}"
+      when:
+        - requested_target_vm | length > 0
+        - resolved_target_connection == 'ssh'
+
+    - name: Register runtime playbook target
+      ansible.builtin.add_host:
+        name: "{{ resolved_target_name }}"
+        groups: ansible_playbook_target
+        ansible_connection: "{{ resolved_target_connection }}"
+        ansible_host: "{{ requested_target_host if resolved_target_connection != 'local' else omit }}"
+        ansible_user: "{{ resolved_target_user if resolved_target_user | length > 0 else omit }}"
+        ansible_port: "{{ resolved_target_port if resolved_target_port != '' else omit }}"
+        ansible_ssh_private_key_file: "{{ resolved_target_ssh_key if resolved_target_ssh_key | length > 0 else omit }}"
+        ansible_ssh_common_args: "{{ resolved_target_ssh_common_args if resolved_target_connection != 'local' else omit }}"
+        ansible_python_interpreter: "{{ target_python_interpreter | default('/usr/bin/python3') }}"
+
+- hosts: ansible_playbook_target
+  vars:
+    home_dir: "{{ ansible_env.HOME | default(ansible_user_dir) }}"
+    linux_user: "{{ ansible_user | default(ansible_env.USER, true) }}"
 
   roles:
     - role: fonts

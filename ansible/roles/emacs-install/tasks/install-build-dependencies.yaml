@@ -60,6 +60,7 @@
       - openssh-client
       - python3
       - texinfo
+      - texlive-base
       - wget
       - xaw3dg-dev
       - zlib1g-dev

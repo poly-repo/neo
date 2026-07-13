@@ -16,10 +16,17 @@ package is required.
   selects every variant with that version; a =version-suffix= name (e.g.
   =master-lucid=, =30.2-gtk3=) selects just that one variant. Set it on the
   command line via =-e emacs_version_name==.
+- =emacs_git_repo_url= (default =https://github.com/emacs-mirror/emacs.git=):
+  git remote used for =source: git= Emacs builds. The GitHub mirror is the
+  default for resilience. Override it explicitly, for example with
+  =-e emacs_git_repo_url=https://git.savannah.gnu.org/git/emacs.git=, if you
+  want to build from Savannah instead.
 - =emacs_versions= (vars/main.yaml): the list of Emacs builds (master + the
   configured releases) with their =configure= flags and tree-sitter version.
-- =emacs_keep_daily_builds= (default =3=): how many date-stamped daily
-  =master= builds to keep under =~/.local=. See "Daily master builds" below.
+- =emacs_keep_daily_builds= (default =3=): the maximum number of
+  date-stamped daily =master= build days to keep under =~/.local=. If fewer
+  than that exist, keep whatever is available. See "Daily master builds"
+  below.
 
 ** Dependencies
 
@@ -41,8 +48,9 @@ variables passed in as parameters) is always nice for users too:
 The =master= build installs to =~/.local/emacs-master-YYYY-MM-DD[-suffix]= and
 is skipped when today's directory already exists, so it is effectively one
 build per day. After each run the role prunes these date-stamped directories
-down to the newest =emacs_keep_daily_builds= (the undated legacy
-=emacs-master-<suffix>= is never touched).
+down to the newest =emacs_keep_daily_builds= *at most*; on a fresh system that
+has only built today, that means keeping just today's build. The undated
+legacy =emacs-master-<suffix>= is never touched.
 
 To build one automatically every day, two scripts live in
 =infra/ansible/scripts/=:

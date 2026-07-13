@@ -56,6 +56,13 @@
     msg: "Skipping Emacs build because {{ emacs_target_dir }} already exists."
   when: install_dir.stat.exists
 
+- name: Ensure build root exists on persistent storage
+  ansible.builtin.file:
+    path: "{{ emacs_build_root }}"
+    state: directory
+    mode: '0755'
+  when: not install_dir.stat.exists
+
 - name: Set Emacs base url (release candidates)
   set_fact:
     emacs_base_url: "https://alpha.gnu.org/gnu/emacs/pretest"
@@ -82,6 +89,7 @@
   tempfile:
     state: directory
     prefix: tree-sitter-
+    path: "{{ emacs_build_root }}"
   register: tree_sitter_build_dir
   when: not install_dir.stat.exists and not tree_sitter_installed.stat.exists
 
@@ -126,6 +134,7 @@
   ansible.builtin.tempfile:
     state: directory
     prefix: emacs-
+    path: "{{ emacs_build_root }}"
   register: source_dir
   when: not install_dir.stat.exists
 
@@ -152,7 +161,7 @@
 
 - name: Shallow clone from git at {{ emacs_version }}
   ansible.builtin.git:
-    repo: 'https://git.savannah.gnu.org/git/emacs.git' # 'https://github.com/emacs-mirror/emacs.git'
+    repo: "{{ emacs_git_repo_url }}"
     dest: "{{source_dir.path}}/emacs_source"
     single_branch: true
     depth: 1
@@ -237,6 +246,7 @@
   ansible.posix.patch:
     src: "{{ temp_file.path }}"
     basedir: "{{ emacs_source_dir }}/src"
+    remote_src: true
   when: temp_file.path is defined
 
 - name: Apply custom Emacs source patch
@@ -278,6 +288,34 @@
         PKG_CONFIG_PATH: "{{ tree_sitter_prefix }}/lib/pkgconfig"
       register: configure_result
 
+    - name: Skip top-level Info target in Git build template
+      ansible.builtin.replace:
+        path: "{{ emacs_source_dir }}/Makefile.in"
+        regexp: '(?m)^(actual-all:.*?)(?:\s+info)(\s+.*)$'
+        replace: '\1\2'
+      when: source == 'git'
+
+    - name: Skip top-level Info target in current Git build Makefile
+      ansible.builtin.replace:
+        path: "{{ emacs_build_dir }}/Makefile"
+        regexp: '(?m)^(actual-all:.*?)(?:\s+info)(\s+.*)$'
+        replace: '\1\2'
+      when: source == 'git'
+
+    - name: Skip install-info dependency in Git build template
+      ansible.builtin.replace:
+        path: "{{ emacs_source_dir }}/Makefile.in"
+        regexp: '(?m)^(install-arch-indep:.*?)(?:\s+install-info)(\s+.*)$'
+        replace: '\1\2'
+      when: source == 'git'
+
+    - name: Skip install-info dependency in current Git build Makefile
+      ansible.builtin.replace:
+        path: "{{ emacs_build_dir }}/Makefile"
+        regexp: '(?m)^(install-arch-indep:.*?)(?:\s+install-info)(\s+.*)$'
+        replace: '\1\2'
+      when: source == 'git'
+
     - name: Bootstrap
       ansible.builtin.command:
         cmd: "make --jobs {{ansible_processor_vcpus}} bootstrap"
@@ -308,7 +346,7 @@
         content: "{{ configure_result.stdout }}"
         dest: "{{ configure_stdout_file.path }}"
     - name: Summarize configure output and detect library versions
-      ansible.builtin.command:
+      ansible.builtin.script:
         cmd: >-
           {{ role_path }}/scripts/summarize-configure
           {{ configure_stdout_file.path }}
