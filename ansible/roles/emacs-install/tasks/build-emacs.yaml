@@ -255,6 +255,22 @@
     basedir: "{{emacs_source_dir}}/src"
   when: not install_dir.stat.exists and patch != ''
 
+# Upstream bug#81332 fix (Boris Buliga, 2026-07-09): a fresh checkout's
+# top-level Makefile.in derives info/dir's prerequisites for org-based
+# manuals (e.g. modus-themes) as doc/misc/NAME.texi, which is generated
+# and doesn't exist yet, so `make bootstrap` fails with "No rule to make
+# target 'doc/misc/modus-themes.texi', needed by 'info/dir'". Patching
+# Makefile.in before Configure means the generated build Makefile picks
+# up the fix directly, without needing a second patch afterward.
+- name: Apply upstream fix for info/dir depending on unbuilt org-manual .texi (bug#81332)
+  ansible.posix.patch:
+    src: emacs-info-dir-org-manuals.patch
+    basedir: "{{emacs_source_dir}}"
+    strip: 1
+  when: >-
+    not install_dir.stat.exists and source == 'git'
+    and emacs_apply_info_dir_org_manuals_patch
+
 - name: Delete the temporary file
   file:
     path: "{{ temp_file.path }}"
@@ -288,33 +304,38 @@
         PKG_CONFIG_PATH: "{{ tree_sitter_prefix }}/lib/pkgconfig"
       register: configure_result
 
+    # Fallback only (see emacs_skip_info_workaround in defaults/main.yaml):
+    # disabled by default now that the upstream bug#81332 patch is applied
+    # above, which fixes info/dir generation properly instead of skipping
+    # it. Kept here, flag-gated, in case that patch stops applying or the
+    # bug resurfaces and a same-day build matters more than having manuals.
     - name: Skip top-level Info target in Git build template
       ansible.builtin.replace:
         path: "{{ emacs_source_dir }}/Makefile.in"
         regexp: '(?m)^(actual-all:.*?)(?:\s+info)(\s+.*)$'
         replace: '\1\2'
-      when: source == 'git'
+      when: source == 'git' and emacs_skip_info_workaround
 
     - name: Skip top-level Info target in current Git build Makefile
       ansible.builtin.replace:
         path: "{{ emacs_build_dir }}/Makefile"
         regexp: '(?m)^(actual-all:.*?)(?:\s+info)(\s+.*)$'
         replace: '\1\2'
-      when: source == 'git'
+      when: source == 'git' and emacs_skip_info_workaround
 
     - name: Skip install-info dependency in Git build template
       ansible.builtin.replace:
         path: "{{ emacs_source_dir }}/Makefile.in"
         regexp: '(?m)^(install-arch-indep:.*?)(?:\s+install-info)(\s+.*)$'
         replace: '\1\2'
-      when: source == 'git'
+      when: source == 'git' and emacs_skip_info_workaround
 
     - name: Skip install-info dependency in current Git build Makefile
       ansible.builtin.replace:
         path: "{{ emacs_build_dir }}/Makefile"
         regexp: '(?m)^(install-arch-indep:.*?)(?:\s+install-info)(\s+.*)$'
         replace: '\1\2'
-      when: source == 'git'
+      when: source == 'git' and emacs_skip_info_workaround
 
     - name: Bootstrap
       ansible.builtin.command:
