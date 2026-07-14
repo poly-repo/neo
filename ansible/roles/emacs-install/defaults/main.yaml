@@ -12,3 +12,25 @@ emacs_build_root: "{{ ansible_user_dir }}/.cache/emacs-builds"
 # a fresh system that has only built today), keep whatever exists. The undated
 # legacy build (emacs-master-<suffix>) is never touched.
 emacs_keep_daily_builds: 3
+
+# Fallback workaround for upstream bug#81332 ("No rule to make target
+# 'doc/misc/modus-themes.texi', needed by 'info/dir'"): strips info/
+# install-info from the top-level build/install targets entirely, so the
+# build succeeds but no Info manuals (including modus-themes) get built or
+# installed. build-emacs.yaml now applies upstream's real fix instead
+# (files/emacs-info-dir-org-manuals.patch), which lets Info generation
+# proceed normally. Flip this to true only if that patch stops applying
+# cleanly or the bug resurfaces (e.g. the race a reviewer flagged, where
+# info/dir generation still races doc/misc's own build in some trees) and
+# a same-day build is more valuable than having the manuals.
+emacs_skip_info_workaround: false
+
+# Set to false (e.g. -e emacs_apply_info_dir_org_manuals_patch=false) to
+# manually verify whether files/emacs-info-dir-org-manuals.patch (upstream
+# bug#81332) is still needed: run the build without it and see if Bootstrap
+# still fails on doc/misc/modus-themes.texi. In normal runs you shouldn't
+# need this — the patch task uses `patch --forward`, so once upstream
+# merges the same fix into master it becomes a no-op (task reports
+# changed=false in the log) instead of erroring, so it's safe to leave
+# applied indefinitely.
+emacs_apply_info_dir_org_manuals_patch: true
