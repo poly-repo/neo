@@ -33,12 +33,7 @@ recipe.")
 
 (defconst neo--use-package-list-sections
   '(:config :init :hook :bind :bind* :custom-face :mode :interpreter
-    :commands :defines :functions :requires
-    ;; :after/:defer/:demand/:if/:when/:unless/:disabled: the last four are
-    ;; known-broken in neo/use-package independent of this feature (see
-    ;; extensions/CLEANUP-PLAN.md) -- concatenate-and-dedup like any other
-    ;; list section, don't attempt to interpret or "fix" them here.
-    :after :defer :demand :if :when :unless :disabled)
+    :commands :defines :functions :requires :after :defer :demand)
   "Keyword sections merged by concatenating and de-duping `equal' forms.")
 
 (defconst neo--use-package-mapping-sections '(:custom)
@@ -46,6 +41,25 @@ recipe.")
 
 (defconst neo--use-package-scalar-sections '(:ensure)
   "Keyword sections holding a single value classified default-vs-real.")
+
+(defconst neo--use-package-single-value-sections '(:ensure :if :disabled)
+  "Output sections whose `section-origins' entry is a single SOURCE cons,
+not a list of `(FORM . SOURCE)' pairs. Used by
+`neo--format-package-provenance' to skip the per-item origin display for
+these -- `:ensure' is `neo--use-package-scalar-sections'; `:if'/`:disabled'
+are the two possible output keywords of
+`neo--merge-use-package-condition-section', which likewise records a
+single deciding source rather than one per surviving form.")
+
+(defconst neo--use-package-condition-keywords '(:if :when :unless :disabled)
+  "Keywords merged by `neo--merge-use-package-condition-section' into a
+single `:if' (or bare `:disabled') in the replayed form, instead of being
+concatenated like an ordinary list section. Native `use-package' treats
+these four as one underlying concept -- `use-package-unalias-keywords'
+rewrites `:when' to `:if' and `:unless X' to `:if (not X)', and
+`use-package-merge-key-alist''s `:if' entry ANDs repeated `:if's within one
+form -- so naive per-source concatenation produces a malformed
+`(use-package NAME :if COND1 COND2 ...)' (`:if' takes exactly one argument).")
 
 (defun neo--alist-append (alist key value)
   "Add VALUE to the list associated with KEY in ALIST.
@@ -278,6 +292,130 @@ value won, or nil when VALUE is the framework default."
                     conflicts)))
           (list first-value first-source (nreverse conflicts)))))))
 
+(defun neo--use-package-condition-forms (keyword args-alist)
+  "Return the forms KEYWORD maps to in ARGS-ALIST, or nil.
+ARGS-ALIST is shaped as returned by `neo--sectioned-list->alist'."
+  (let ((entry (assoc keyword args-alist)))
+    (and entry (listp (cdr entry)) (cdr entry))))
+
+(defun neo--use-package-source-condition (args-alist)
+  "Reduce ARGS-ALIST's :if/:when/:unless/:disabled to one condition.
+Returns `neo/disabled' when `:disabled' is present -- matching native
+`use-package', whose `:disabled' presence makes every other keyword
+irrelevant, so other condition keywords are ignored once `:disabled' is
+seen. Returns `neo/absent' when none of `neo--use-package-condition-keywords'
+appears. Otherwise returns a single Lisp form: this source's own `:if'
+forms, then `:when' forms, then negated `:unless' forms, AND-combined in
+that order (a single term is returned unwrapped; two or more are wrapped
+in `(and ...)')."
+  (if (assoc :disabled args-alist)
+      'neo/disabled
+    (let (terms)
+      (dolist (form (neo--use-package-condition-forms :if args-alist))
+        (push form terms))
+      (dolist (form (neo--use-package-condition-forms :when args-alist))
+        (push form terms))
+      (dolist (form (neo--use-package-condition-forms :unless args-alist))
+        (push (list 'not form) terms))
+      (setq terms (nreverse terms))
+      (cond
+       ((null terms) 'neo/absent)
+       ((null (cdr terms)) (car terms))
+       (t (cons 'and terms))))))
+
+(defun neo--use-package-condition-trivially-false-p (condition)
+  "Non-nil when CONDITION is structurally guaranteed false without
+evaluating it: `neo/disabled', or a literal `nil' (e.g. from `:if nil')."
+  (or (eq condition 'neo/disabled) (null condition)))
+
+(defun neo--use-package-condition-conflict (name kept-source kept-value dropped-source dropped-value)
+  "Build a `neo-merge-conflict' for NAME's merged :if/:disabled section.
+Shares shape across both condition-merge branches: SECTION is `:if',
+SUB-KEY nil."
+  (make-neo-merge-conflict
+   :package-name name :section :if :sub-key nil
+   :kept-source kept-source :kept-value kept-value
+   :dropped-source dropped-source :dropped-value dropped-value))
+
+(defun neo--merge-use-package-condition-disable (name conditions false-pairs)
+  "Merge CONDITIONS for NAME when at least one source is trivially-false.
+CONDITIONS is `((SOURCE . CONDITION) ...)' as produced by
+`neo--use-package-source-condition'; FALSE-PAIRS is the subset that is
+trivially-false per `neo--use-package-condition-trivially-false-p'. A
+`:disabled' source wins over a merely `:if nil' source; ties within each
+class keep declaration order. Unanimous agreement (every source
+trivially-false) produces no conflict; otherwise every other source is
+recorded as silently overridden.
+
+Returns `(VALUE ORIGIN CONFLICTS)', see `neo--merge-use-package-condition-section'."
+  (let* ((disabling (or (cl-find-if (lambda (c) (eq (cdr c) 'neo/disabled)) false-pairs)
+                         (car false-pairs)))
+         (value (if (eq (cdr disabling) 'neo/disabled) 'neo/disabled nil))
+         (origin (car disabling))
+         (kept-value (if (eq value 'neo/disabled) '(:disabled) (list :if value)))
+         (conflicts nil))
+    (unless (= (length false-pairs) (length conditions))
+      (dolist (pair conditions)
+        (unless (memq pair false-pairs)
+          (push (neo--use-package-condition-conflict
+                 name origin kept-value (car pair)
+                 (if (eq (cdr pair) 'neo/absent) t (list :if (cdr pair))))
+                conflicts))))
+    (list value origin (nreverse conflicts))))
+
+(defun neo--merge-use-package-condition-and (name conditions)
+  "Merge CONDITIONS for NAME when no source is trivially-false.
+CONDITIONS is shaped as in `neo--merge-use-package-condition-disable'.
+Distinct real conditions AND-combine silently -- mirrors `use-package''s
+own repeated-`:if' semantics, since every contributing source already
+opted into conditional loading. A source that declared no condition at
+all (implicitly unconditional) is flagged as a conflict, since it
+silently gains the AND-combined restriction it never asked for.
+
+Returns `(VALUE ORIGIN CONFLICTS)', see `neo--merge-use-package-condition-section'."
+  (let* ((real-pairs (cl-remove-if (lambda (c) (eq (cdr c) 'neo/absent)) conditions))
+         (unconditional-pairs (cl-remove-if-not (lambda (c) (eq (cdr c) 'neo/absent)) conditions))
+         (distinct nil))
+    (dolist (pair real-pairs)
+      (unless (cl-member (cdr pair) distinct :test #'equal)
+        (push (cdr pair) distinct)))
+    (setq distinct (nreverse distinct))
+    (let* ((value (if (cdr distinct) (cons 'and distinct) (car distinct)))
+           (origin (car (car real-pairs)))
+           (conflicts nil))
+      (dolist (pair unconditional-pairs)
+        (push (neo--use-package-condition-conflict
+               name origin (list :if value) (car pair) t)
+              conflicts))
+      (list value origin (nreverse conflicts)))))
+
+(defun neo--merge-use-package-condition-section (name pairs)
+  "Merge :if/:when/:unless/:disabled across PAIRS for package NAME.
+PAIRS is a list of `(SOURCE . ARGS-ALIST)'. Returns `(VALUE ORIGIN
+CONFLICTS)', shaped like `neo--merge-use-package-ensure-section': VALUE is
+`neo/disabled' (emit a bare `:disabled'), `neo/absent' (emit nothing), or
+a single Lisp form (emit `:if VALUE'). ORIGIN is the source that decided
+VALUE, or nil when VALUE is `neo/absent'.
+
+A source that declares none of `neo--use-package-condition-keywords' is
+treated as unconditional (equivalent to `t'), matching `use-package''s own
+default. Conflicts are recorded only when the merge silently overrides a
+source's own expectation -- see `neo--merge-use-package-condition-disable'
+and `neo--merge-use-package-condition-and'. Two genuinely conditional
+sources AND-combining is not itself a conflict."
+  (let (conditions)
+    (dolist (pair pairs)
+      (push (cons (car pair) (neo--use-package-source-condition (cdr pair))) conditions))
+    (setq conditions (nreverse conditions))
+    (if (cl-every (lambda (c) (eq (cdr c) 'neo/absent)) conditions)
+        (list 'neo/absent nil nil)
+      (let ((false-pairs (cl-remove-if-not
+                           (lambda (c) (neo--use-package-condition-trivially-false-p (cdr c)))
+                           conditions)))
+        (if false-pairs
+            (neo--merge-use-package-condition-disable name conditions false-pairs)
+          (neo--merge-use-package-condition-and name conditions))))))
+
 (defun neo--merge-use-package-declarations (name ordered-source-args-pairs)
   "Merge ORDERED-SOURCE-ARGS-PAIRS into one args-alist for NAME.
 ORDERED-SOURCE-ARGS-PAIRS is a list of `(SOURCE-KEY . ARGS-ALIST)' in
@@ -317,6 +455,24 @@ function's job, warning about them is the caller's."
         (when origin
           (push (cons section origin) section-origins))
         (setq conflicts (append conflicts section-conflicts))))
+    ;; :if/:when/:unless/:disabled are handled as one call, not a dolist
+    ;; over `neo--use-package-condition-keywords', because unlike the three
+    ;; loops above (each of which merges SECTION -> SECTION), this one
+    ;; collapses 4 distinct input keywords into a single :if (or bare
+    ;; :disabled) output keyword -- see
+    ;; `neo--merge-use-package-condition-section'.
+    (let* ((result (neo--merge-use-package-condition-section name ordered-source-args-pairs))
+           (value (nth 0 result))
+           (origin (nth 1 result))
+           (section-conflicts (nth 2 result)))
+      (cond
+       ((eq value 'neo/disabled)
+        (push (cons :disabled 'neo/no-args) merged-args-alist))
+       ((not (eq value 'neo/absent))
+        (push (cons :if (list value)) merged-args-alist)))
+      (when origin
+        (push (cons (if (eq value 'neo/disabled) :disabled :if) origin) section-origins))
+      (setq conflicts (append conflicts section-conflicts)))
     (make-neo-package-provenance
      :name name
      :sources sources
@@ -346,7 +502,7 @@ PROVENANCE is a `neo-package-provenance', typically looked up from
           (insert "\nContributions by section:\n")
           (dolist (section-entry section-origins)
             (let ((section (car section-entry)))
-              (unless (memq section neo--use-package-scalar-sections)
+              (unless (memq section neo--use-package-single-value-sections)
                 (insert (format "  %s:\n" section))
                 (dolist (origin (cdr section-entry))
                   (insert (format "    %S <- %s\n"

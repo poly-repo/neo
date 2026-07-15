@@ -61,7 +61,13 @@ cross-extension visibility, so it cannot merge duplicate declarations
 the way `neo/replay-installed-extensions-packages' does. Replaying a
 single extension after a full merged bootstrap can therefore re-eval a
 package whose declaration was already merged with another extension's --
-a pre-existing risk class, not a regression introduced by merging."
+a pre-existing risk class, not a regression introduced by merging.
+
+`:if'/`:when'/`:unless'/`:disabled' are unaffected by this: a single
+extension's own condition keywords are already well-formed and evaluated
+by `use-package' itself, with no merging involved here (see
+`neo--merge-use-package-condition-section' in neo-use-package.el for the
+cross-extension case this path does not exercise)."
   (interactive)
   (let ((user (when slug (neo/extension-slug-publisher slug)))
         (extension (when slug (neo/extension-slug-name slug))))
