@@ -116,19 +116,25 @@ in 'publisher:name' format."
 (cl-defmethod neo/replay-installed-extensions-packages ((framework neo-framework))
   "Replay package configurations for all installed extensions in FRAMEWORK.
 
-Extensions are replayed in the same dependency-respecting topological
+Extensions are visited in the same dependency-respecting topological
 order used by `neo/load-installed-extensions', so that a `neo/use-package'
 declaration in a dependency extension is always installed/configured
 before the declarations of extensions that `:require' it -- `maphash'
-order over `installed-extensions' gives no such guarantee."
+order over `installed-extensions' gives no such guarantee.
+
+Unlike the single-extension `neo/replay-extension-packages', this method
+has visibility across all installed extensions: `neo--collect-package-sources'
+groups every extension's queued declarations by package name first, so
+that when two extensions declare the same package, `neo--replay-merged-package'
+merges them into a single `use-package' form instead of evaluating two
+separate ones (see `neo--merge-use-package-declarations')."
   (let* ((installed-map (neo-framework-installed-extensions framework))
          (available (neo-framework-available-extensions framework))
          (installed-slugs (let (keys) (maphash (lambda (k _v) (push k keys)) installed-map) keys))
-         (sorted-slugs (neo/topo-sort-from-roots available installed-slugs '(:on-missing ignore)))
-         (neo--replayed-package-installs (make-hash-table :test 'equal)))
-    (dolist (slug-string sorted-slugs)
-      (when-let* ((installation (gethash slug-string installed-map)))
-        (neo/replay-extension-packages (neo/installation-extension-slug installation)))))
+         (sorted-slugs (neo/topo-sort-from-roots available installed-slugs '(:on-missing ignore))))
+    (setq neo--package-provenance-table (make-hash-table :test 'equal))
+    (dolist (entry (neo--collect-package-sources sorted-slugs installed-map neo--enabled-packages))
+      (neo--replay-merged-package (car entry) (cdr entry))))
   (setq neo/framework-bootstrapped-p t)
   (run-hooks 'neo/after-framework-bootstrap-hook))
 
