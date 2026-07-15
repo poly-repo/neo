@@ -1,5 +1,51 @@
 ;;; -*- lexical-binding: t -*-
+(require 'cl-lib)
 (require 'neo-list-utils)
+
+(cl-defstruct (neo-merge-conflict (:constructor make-neo-merge-conflict))
+  "A single dropped value from merging duplicate `neo/use-package' declarations.
+PACKAGE-NAME is the package the conflict occurred in, SECTION is the
+keyword section (e.g. `:custom', `:ensure'), SUB-KEY further identifies
+the conflicting item within SECTION (e.g. the `:custom' variable
+symbol), nil when SECTION has no sub-keys (e.g. `:ensure').
+KEPT-SOURCE/KEPT-VALUE describe the value that survived the merge,
+DROPPED-SOURCE/DROPPED-VALUE the value that lost. SOURCE values are
+`(publisher . extension)' conses, the same shape used as
+`neo--enabled-packages' keys."
+  package-name section sub-key kept-source kept-value dropped-source dropped-value)
+
+(cl-defstruct (neo-package-provenance (:constructor make-neo-package-provenance))
+  "Provenance of a package's merged `neo/use-package' declaration.
+NAME is the package name symbol. SOURCES is the ordered list of
+`(publisher . extension)' conses that contributed a declaration.
+MERGED-ARGS-ALIST is the final keyword-sectioned alist (as produced by
+`neo--sectioned-list->alist') used to build the single `use-package'
+form. SECTION-ORIGINS records, per section, which source first
+contributed each surviving item. CONFLICTS is a list of
+`neo-merge-conflict' structs describing every value that was dropped."
+  name sources merged-args-alist section-origins conflicts)
+
+(defconst neo--use-package-default-ensure '(:wait t)
+  "Default `:ensure' value injected by `neo/use-package'.
+Shared with the merge logic in `neo--merge-use-package-declarations' so
+it can recognize a framework-injected default vs. a real user-supplied
+recipe.")
+
+(defconst neo--use-package-list-sections
+  '(:config :init :hook :bind :bind* :custom-face :mode :interpreter
+    :commands :defines :functions :requires
+    ;; :after/:defer/:demand/:if/:when/:unless/:disabled: the last four are
+    ;; known-broken in neo/use-package independent of this feature (see
+    ;; extensions/CLEANUP-PLAN.md) -- concatenate-and-dedup like any other
+    ;; list section, don't attempt to interpret or "fix" them here.
+    :after :defer :demand :if :when :unless :disabled)
+  "Keyword sections merged by concatenating and de-duping `equal' forms.")
+
+(defconst neo--use-package-mapping-sections '(:custom)
+  "Keyword sections merged as a mapping keyed by each form's `car'.")
+
+(defconst neo--use-package-scalar-sections '(:ensure)
+  "Keyword sections holding a single value classified default-vs-real.")
 
 (defun neo--alist-append (alist key value)
   "Add VALUE to the list associated with KEY in ALIST.
@@ -124,6 +170,238 @@ applies configuration without re-queueing the install."
           form))
     form))
 
+(defun neo--format-source-key (source-key)
+  "Return a human-readable \"publisher:extension\" string for SOURCE-KEY.
+SOURCE-KEY is a `(publisher . extension)' cons, the same shape used as
+`neo--enabled-packages' keys."
+  (if source-key
+      (format "%s:%s" (car source-key) (cdr source-key))
+    "unknown"))
+
+(defun neo--merge-use-package-list-section (section pairs)
+  "Merge list SECTION across PAIRS, forms concatenated and `equal'-deduped.
+PAIRS is a list of `(SOURCE . ARGS-ALIST)', ARGS-ALIST shaped as
+returned by `neo--sectioned-list->alist'. SECTION must be one of
+`neo--use-package-list-sections'.
+
+Returns `(VALUE . ORIGINS)'. VALUE is the deduped list of forms in
+first-occurrence order, the symbol `neo/no-args' when every source that
+declared SECTION used the bare-flag form, or `neo/absent' when no
+source declared SECTION at all. ORIGINS is an alist of `(FORM . SOURCE)'
+for each surviving form, or, when VALUE is `neo/no-args', a single
+`(SECTION . SOURCE)' pair naming the first source that declared the
+flag."
+  (let (merged origins flag-source present)
+    (dolist (pair pairs)
+      (let* ((source (car pair))
+             (entry (assoc section (cdr pair))))
+        (when entry
+          (setq present t)
+          (if (eq (cdr entry) 'neo/no-args)
+              (unless flag-source (setq flag-source source))
+            (dolist (form (cdr entry))
+              (unless (cl-member form merged :test #'equal)
+                (push form merged)
+                (push (cons form source) origins)))))))
+    (cond
+     (merged (cons (nreverse merged) (nreverse origins)))
+     (flag-source (cons 'neo/no-args (list (cons section flag-source))))
+     (present (cons 'neo/no-args nil))
+     (t (cons 'neo/absent nil)))))
+
+(defun neo--merge-use-package-mapping-section (name section pairs)
+  "Merge mapping SECTION across PAIRS for package NAME.
+PAIRS is a list of `(SOURCE . ARGS-ALIST)'. SECTION must be one of
+`neo--use-package-mapping-sections'; each of its forms is keyed by its
+own `car' (e.g. the variable symbol in a `:custom' entry). An unseen key
+is added; a key seen again with an `equal' form is silently deduped; a
+key seen again with a different form keeps the first and records a
+`neo-merge-conflict'.
+
+Returns `(VALUE ORIGINS CONFLICTS)': VALUE is the merged list of forms,
+ORIGINS is an alist of `(KEY . SOURCE)', CONFLICTS a list of
+`neo-merge-conflict' structs."
+  (let (merged origins conflicts (seen (make-hash-table :test 'eq)))
+    (dolist (pair pairs)
+      (let* ((source (car pair))
+             (entry (assoc section (cdr pair)))
+             (forms (and entry (listp (cdr entry)) (cdr entry))))
+        (dolist (form forms)
+          (let* ((key (car form))
+                 (existing (gethash key seen)))
+            (cond
+             ((null existing)
+              (puthash key (cons source form) seen)
+              (push form merged)
+              (push (cons key source) origins))
+             ((not (equal (cdr existing) form))
+              (push (make-neo-merge-conflict
+                     :package-name name :section section :sub-key key
+                     :kept-source (car existing) :kept-value (cdr existing)
+                     :dropped-source source :dropped-value form)
+                    conflicts)))))))
+    (list (nreverse merged) (nreverse origins) (nreverse conflicts))))
+
+(defun neo--merge-use-package-ensure-section (name section pairs)
+  "Merge scalar `:ensure'-shaped SECTION across PAIRS for package NAME.
+PAIRS is a list of `(SOURCE . ARGS-ALIST)'. Each source's value is
+classified as \"default\" (`equal' to `neo--use-package-default-ensure')
+or \"real\". When NAME is \"emacs\", SECTION always merges to nil with
+no conflict check. Otherwise: all-default sources merge to the default;
+exactly one real value wins outright; two or more `equal' real values
+merge to that value; two or more differing real values keep the first
+and record a `neo-merge-conflict' for each of the rest.
+
+Returns `(VALUE ORIGIN CONFLICTS)': ORIGIN is the source whose real
+value won, or nil when VALUE is the framework default."
+  (if (string= name "emacs")
+      (list nil nil nil)
+    (let (real-pairs conflicts)
+      (dolist (pair pairs)
+        (let ((entry (assoc section (cdr pair))))
+          (when (and entry (listp (cdr entry)))
+            (let ((value (cadr entry)))
+              (unless (equal value neo--use-package-default-ensure)
+                (push (cons (car pair) value) real-pairs))))))
+      (setq real-pairs (nreverse real-pairs))
+      (if (null real-pairs)
+          (list neo--use-package-default-ensure nil nil)
+        (let* ((first (car real-pairs))
+               (first-source (car first))
+               (first-value (cdr first)))
+          (dolist (pair (cdr real-pairs))
+            (unless (equal (cdr pair) first-value)
+              (push (make-neo-merge-conflict
+                     :package-name name :section section :sub-key nil
+                     :kept-source first-source :kept-value first-value
+                     :dropped-source (car pair) :dropped-value (cdr pair))
+                    conflicts)))
+          (list first-value first-source (nreverse conflicts)))))))
+
+(defun neo--merge-use-package-declarations (name ordered-source-args-pairs)
+  "Merge ORDERED-SOURCE-ARGS-PAIRS into one args-alist for NAME.
+ORDERED-SOURCE-ARGS-PAIRS is a list of `(SOURCE-KEY . ARGS-ALIST)' in
+dependency-first order, each ARGS-ALIST shaped as returned by
+`neo--sectioned-list->alist'. Returns a `neo-package-provenance'.
+
+Pure -- never calls `display-warning'; recording conflicts is this
+function's job, warning about them is the caller's."
+  (let ((sources (mapcar #'car ordered-source-args-pairs))
+        (merged-args-alist nil)
+        (section-origins nil)
+        (conflicts nil))
+    (dolist (section neo--use-package-list-sections)
+      (let* ((result (neo--merge-use-package-list-section section ordered-source-args-pairs))
+             (value (car result))
+             (origins (cdr result)))
+        (unless (eq value 'neo/absent)
+          (push (cons section value) merged-args-alist)
+          (when origins
+            (push (cons section origins) section-origins)))))
+    (dolist (section neo--use-package-mapping-sections)
+      (let* ((result (neo--merge-use-package-mapping-section name section ordered-source-args-pairs))
+             (value (nth 0 result))
+             (origins (nth 1 result))
+             (section-conflicts (nth 2 result)))
+        (when value
+          (push (cons section value) merged-args-alist))
+        (when origins
+          (push (cons section origins) section-origins))
+        (setq conflicts (append conflicts section-conflicts))))
+    (dolist (section neo--use-package-scalar-sections)
+      (let* ((result (neo--merge-use-package-ensure-section name section ordered-source-args-pairs))
+             (value (nth 0 result))
+             (origin (nth 1 result))
+             (section-conflicts (nth 2 result)))
+        (push (cons section (list value)) merged-args-alist)
+        (when origin
+          (push (cons section origin) section-origins))
+        (setq conflicts (append conflicts section-conflicts))))
+    (make-neo-package-provenance
+     :name name
+     :sources sources
+     :merged-args-alist (nreverse merged-args-alist)
+     :section-origins (nreverse section-origins)
+     :conflicts conflicts)))
+
+(defun neo--format-package-provenance (provenance)
+  "Return a human-readable description of PROVENANCE.
+PROVENANCE is a `neo-package-provenance', typically looked up from
+`neo--package-provenance-table'. Used as the buffer contents for
+`neo/describe-package-source'."
+  (let* ((name (neo-package-provenance-name provenance))
+         (sources (neo-package-provenance-sources provenance))
+         (conflicts (neo-package-provenance-conflicts provenance))
+         (section-origins (neo-package-provenance-section-origins provenance))
+         (ensure-value (cadr (assoc :ensure (neo-package-provenance-merged-args-alist provenance)))))
+    (with-temp-buffer
+      (insert (format "Package: %s\n\n" name))
+      (if (<= (length sources) 1)
+          (insert (format "Single declaration, from %s. No merge occurred.\n"
+                          (neo--format-source-key (car sources))))
+        (progn
+          (insert (format "Merged from %d declarations:\n" (length sources)))
+          (dolist (source sources)
+            (insert (format "  - %s\n" (neo--format-source-key source))))
+          (insert "\nContributions by section:\n")
+          (dolist (section-entry section-origins)
+            (let ((section (car section-entry)))
+              (unless (memq section neo--use-package-scalar-sections)
+                (insert (format "  %s:\n" section))
+                (dolist (origin (cdr section-entry))
+                  (insert (format "    %S <- %s\n"
+                                  (car origin) (neo--format-source-key (cdr origin))))))))))
+      (insert (format "\nResolved :ensure: %S\n" ensure-value))
+      (if conflicts
+          (progn
+            (insert (format "\n%d conflict(s):\n" (length conflicts)))
+            (dolist (conflict conflicts)
+              (insert (format "  - [%s%s] kept %S from %s, dropped %S from %s\n"
+                              (neo-merge-conflict-section conflict)
+                              (if (neo-merge-conflict-sub-key conflict)
+                                  (format " %S" (neo-merge-conflict-sub-key conflict))
+                                "")
+                              (neo-merge-conflict-kept-value conflict)
+                              (neo--format-source-key (neo-merge-conflict-kept-source conflict))
+                              (neo-merge-conflict-dropped-value conflict)
+                              (neo--format-source-key (neo-merge-conflict-dropped-source conflict))))))
+        (insert "\nNo conflicts.\n"))
+      (buffer-string))))
+
+(defun neo--collect-package-sources (sorted-slugs installed-map enabled-packages)
+  "Group ENABLED-PACKAGES's queued forms by package name.
+
+Walks SORTED-SLUGS (a list of \"publisher:name\" strings in topological,
+dependency-first order) and, for each installed extension found in
+INSTALLED-MAP, looks up its queued `use-package' forms in
+ENABLED-PACKAGES (an alist keyed by `(publisher . extension)' conses, the
+same shape produced by `neo/use-package'). INSTALLED-MAP entries are
+`neo/installation' structs (see `neo-extensions.el').
+
+Returns `((NAME . ((SOURCE-KEY . ARGS-ALIST) ...)) ...)' in
+first-appearance order; each inner list is in dependency-first order,
+ARGS-ALIST shaped as returned by `neo--sectioned-list->alist'.
+
+Pure -- no eval, no side effects."
+  (let (order (by-name (make-hash-table :test 'equal)))
+    (dolist (slug-string sorted-slugs)
+      (when-let* ((installation (gethash slug-string installed-map))
+                  (slug (neo/installation-extension-slug installation))
+                  (key (cons (neo/extension-slug-publisher slug)
+                             (neo/extension-slug-name slug)))
+                  (forms (cdr (assoc key enabled-packages))))
+        (dolist (form forms)
+          (when (and (listp form) (eq (car form) 'use-package))
+            (let* ((name (cadr form))
+                   (args-alist (neo--sectioned-list->alist (cddr form)))
+                   (entry (gethash name by-name)))
+              (if entry
+                  (setcdr entry (append (cdr entry) (list (cons key args-alist))))
+                (puthash name (list (cons key args-alist)) by-name)
+                (push name order)))))))
+    (mapcar (lambda (name) (cons name (gethash name by-name)))
+            (nreverse order))))
+
 (defmacro neo/use-package (name &rest args)
   "Augment `use-package` with Neo-specific tracking and filtering.
 
@@ -136,7 +414,7 @@ immediately executed, otherwise the raw `use-package` form is stored in
                    args
                  (append args (if (string= name "emacs")
                                   '(:ensure nil)
-                                '(:ensure (:wait t))))))
+                                (list :ensure neo--use-package-default-ensure)))))
          (file (or load-file-name buffer-file-name "unknown"))
          (user (neo--publisher-name))
          (extension (file-name-nondirectory
