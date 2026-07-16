@@ -69,13 +69,12 @@ This variable is used by `neo/paraphenalia` to determine visibility of UI compon
 
 (neo/disable-customize-persistence)
 
-(startup-redirect-eln-cache
- (expand-file-name
-  (format "eln-cache/%s-emacs-%d.%d/"
-          (neo/get-emacs-instance-name)
-          emacs-major-version
-          emacs-minor-version)
-  neo/cache-directory))
+(defvar neo/eln-cache-directory
+  (expand-file-name (format "eln-cache/%s/" (neo/emacs-version-key)) neo/cache-directory)
+  "Version-scoped eln-cache directory for this instance.
+See `neo/emacs-version-key' and `neo/force-elisp-refresh'.")
+
+(startup-redirect-eln-cache neo/eln-cache-directory)
 
 (require 'neo-config)
 

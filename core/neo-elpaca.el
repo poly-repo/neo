@@ -27,6 +27,16 @@
 ;; Elpaca litters `user-emacs-directory' with no error — the `cl-assert' right
 ;; after the installer guards against exactly that.
 ;;
+;; Same trick, same invariant, for `elpaca-builds-directory' below: it is
+;; ADDITIONALLY nested under `neo/emacs-version-key' so that a package built
+;; under one Emacs binary is never loaded by a different one reporting a
+;; different version (see the `eshell-syntax-highlighting' `void-variable'
+;; incident this exists to prevent, and `neo/force-elisp-refresh' for manual
+;; recovery when two binaries share a version string but aren't compatible).
+;; `elpaca-sources-directory' is deliberately left un-pre-bound: package
+;; *sources* are not version-dependent, only compiled *builds* are, so sources
+;; stay shared across versions via the verbatim installer's own default.
+;;
 ;; DEVIATIONS from pure-verbatim are kept OUTSIDE the marked region, after it
 ;; (an `advice-add' for enqueue de-duplication and a `-90' depth on the
 ;; `after-init-hook').  Requires `no-littering-var-directory' (from early-init).
@@ -36,6 +46,11 @@
 
 (makunbound 'elpaca-directory)
 (defvar elpaca-directory (expand-file-name "elpaca/" no-littering-var-directory))
+
+(makunbound 'elpaca-builds-directory)
+(defvar elpaca-builds-directory
+  (expand-file-name (neo/emacs-version-key)
+                     (expand-file-name "builds/" elpaca-directory)))
 
 (defun neo/elpaca-hide-successful-log ()
   "Hide Elpaca log buffer if queues processed successfully."
@@ -121,6 +136,32 @@
                             (expand-file-name elpaca-directory))
            t "NEO: elpaca-directory redirect failed — the no-littering \
 pre-binding must precede the installer block (got %s)" elpaca-directory)
+
+;; Same guard for the version-scoping pre-binding above: catches a reordered
+;; or dropped pre-binding just as the assert above catches the littering one.
+(cl-assert (string-prefix-p (expand-file-name (neo/emacs-version-key)
+                                              (expand-file-name "builds/" elpaca-directory))
+                            (expand-file-name elpaca-builds-directory))
+           t "NEO: elpaca-builds-directory version-scoping failed — the \
+pre-binding must precede the installer block (got %s)" elpaca-builds-directory)
+
+(defun neo/force-elisp-refresh ()
+  "Wipe and rebuild every version-scoped compiled-artifact cache.
+
+Deletes this Emacs version's elpaca builds directory
+\(`elpaca-builds-directory') and eln-cache directory
+\(`neo/eln-cache-directory'), then restarts Emacs so both are rebuilt from
+scratch on the next boot.  Version-scoping by directory (see
+`neo/emacs-version-key') only protects against a *version-string* change —
+use this command when two different Emacs binaries report the SAME version
+\(e.g. two `emacs-master' snapshots) but turn out to be incompatible."
+  (interactive)
+  (dolist (dir (list elpaca-builds-directory neo/eln-cache-directory))
+    (when (file-directory-p dir)
+      (delete-directory dir t)))
+  (if (fboundp 'restart-emacs)
+      (restart-emacs)
+    (save-buffers-kill-emacs)))
 
 ;; --- NEO additions (NOT part of the verbatim installer) ---
 (advice-add 'elpaca--enqueue :around #'neo--elpaca-enqueue-deduplicate)

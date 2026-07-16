@@ -165,6 +165,30 @@ if still needed)."
       (neo/reposition-frame-onscreen frame)
       (should-not reposition-calls))))
 
+(ert-deftest neo/emacs-version-key-combines-instance-and-major-minor-version ()
+  "The version key must embed both the instance name and major.minor version.
+
+Regression guard for the elpaca/eln-cache version-scoping feature: a stale
+byte-compiled package built under one Emacs binary was silently loaded by a
+newer binary reporting a different version, so builds must be segregated by
+a key that actually changes across versions."
+  (cl-letf (((symbol-function 'neo/get-emacs-instance-name) (lambda () "test-instance"))
+            (emacs-major-version 30)
+            (emacs-minor-version 2))
+    (should (equal (neo/emacs-version-key) "test-instance-emacs-30.2"))))
+
+(ert-deftest neo/emacs-version-key-changes-with-version ()
+  "Two different major.minor versions must yield two different keys, so
+switching Emacs binaries gets a fresh, isolated build directory."
+  (cl-letf (((symbol-function 'neo/get-emacs-instance-name) (lambda () "test-instance"))
+            (emacs-major-version 30)
+            (emacs-minor-version 2))
+    (let ((key-a (neo/emacs-version-key)))
+      (cl-letf (((symbol-function 'neo/get-emacs-instance-name) (lambda () "test-instance"))
+                (emacs-major-version 32)
+                (emacs-minor-version 0))
+        (should-not (equal key-a (neo/emacs-version-key)))))))
+
 (ert-deftest neo/start-configuration-seeds-only-extension-manager ()
   "`Start configuration' must boot into just the extension manager.
 

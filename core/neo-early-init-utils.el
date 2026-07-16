@@ -42,6 +42,23 @@ Reads from /proc/self/cmdline if needed (Linux-only)."
              ;; Fallback
              neo/default-emacs-instance-name))))
 
+(defun neo/emacs-version-key ()
+  "Return a directory-name-safe key identifying this instance + Emacs version.
+
+Combines `neo/get-emacs-instance-name' with Emacs's major.minor version,
+e.g. \"omega-neo-devel-emacs-30.2\".  Used to nest compiled-artifact caches
+(elpaca builds, eln-cache) under a version-keyed subdirectory, so that
+switching to an Emacs binary reporting a different version never loads
+compiled code produced by a different one -- see the
+`eshell-syntax-highlighting' `void-variable' incident this exists to
+prevent.  Does NOT distinguish between different binaries that happen to
+report the SAME version (e.g. two `emacs-master' snapshots); recovering
+from that residual case is what `neo/force-elisp-refresh' is for."
+  (format "%s-emacs-%d.%d"
+          (neo/get-emacs-instance-name)
+          emacs-major-version
+          emacs-minor-version))
+
 (defun neo/default-emacs-instance-p ()
   "Return non-nil when the current instance uses Neo's default name."
   (string= (neo/get-emacs-instance-name) neo/default-emacs-instance-name))
