@@ -33,7 +33,15 @@
 
 (require 'server)
 
-(unless (server-running-p)
+;; Derive the server name from the instance name (`--name`/`-name`/
+;; `EMACS_NAME`, see `neo/get-emacs-instance-name') instead of Emacs's
+;; hardcoded "server" default, so multiple NEO instances (e.g. a real
+;; profile and a throwaway smoketest instance) each get their own
+;; `emacsclient -s NAME-server` target instead of racing for the same
+;; server socket.
+(setq server-name (format "%s-server" (neo/get-emacs-instance-name)))
+
+(unless (server-running-p server-name)
   (server-start))
 
 (neo/set-emacs-source-directories)
