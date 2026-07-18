@@ -10,12 +10,16 @@ ALIST is the display-buffer alist."
       (select-window window)
       window)))
 
-(cl-defun neo/make-side-display (&key side size slot)
+(cl-defun neo/make-side-display (&key side size slot persistent)
   "Create a display-buffer action for a dedicated side window.
 
 SIDE is one of: left, right, top, bottom.
 SIZE means width for left/right, height for top/bottom.
 SLOT controls ordering among side windows.
+PERSISTENT, when non-nil, marks this side window as reusable: its
+buffer is resurrected by `neo/toggle-side-window' after its window is
+dismissed instead of falling back to the side's registered default
+action.
 
 Returns (FUNCTION . ALIST) suitable for `display-buffer-alist`."
   (let* ((side (or side 'right))
@@ -32,6 +36,7 @@ Returns (FUNCTION . ALIST) suitable for `display-buffer-alist`."
               (preserve-size . (nil . t)))))
       (dedicated . t)
       (inhibit-same-window . t)
+      (persistent . ,persistent)
       (window-parameters
        (mode-line-format . none)))))
 
@@ -44,6 +49,12 @@ ARGS can include:
 :side - The side of the frame ('left, 'right, 'top, 'bottom).
 :size - The size of the window.
 :slot - The slot for the side window.
+:persistent - If non-nil, `neo/toggle-side-window' resurrects this
+buffer after its window is dismissed instead of falling back to the
+side's registered default action. Intended for windows the user
+explicitly toggles open and closed (e.g. Treemacs, eshell), as
+opposed to transient views (Help, Info, compilation output) that
+should release their slot once dismissed.
 
 Examples:
 (neo/side-window :regex \"^\\*gemini.*\\*$\" :side 'right :size 80)
@@ -53,12 +64,14 @@ Examples:
         (include-derived (plist-get args :include-derived))
         (side (plist-get args :side))
         (size (plist-get args :size))
-        (slot (plist-get args :slot)))
+        (slot (plist-get args :slot))
+        (persistent (plist-get args :persistent)))
     (cond
      (regex
       (add-to-list 'display-buffer-alist
                    (cons regex
-                         (neo/make-side-display :side side :size size :slot slot))))
+                         (neo/make-side-display :side side :size size :slot slot
+                                                 :persistent persistent))))
      (mode
       (add-to-list 'display-buffer-alist
                    (cons (lambda (buf _action)
@@ -66,7 +79,8 @@ Examples:
                              (if include-derived
                                  (derived-mode-p mode)
                                (eq major-mode mode))))
-                         (neo/make-side-display :side side :size size :slot slot))))
+                         (neo/make-side-display :side side :size size :slot slot
+                                                 :persistent persistent))))
      (t
       (error "neo/side-window: Must specify :regex or :mode")))))
 
@@ -79,9 +93,11 @@ Examples:
     (funcall condition buffer nil))
    (t nil)))
 
-(defun neo/buffer-targets-side-window-p (buffer &optional side)
-  "Return non-nil if BUFFER is configured to be displayed in a side window.
-If SIDE is non-nil, checks if it targets that specific SIDE."
+(defun neo/buffer-side-window-alist (buffer)
+  "Return BUFFER's side-window display-buffer-alist ALIST, or nil.
+Only returns the ALIST when BUFFER's matching `display-buffer-alist'
+entry targets a side window (via `display-buffer-in-side-window' or
+`neo--display-and-select')."
   (let ((match (cl-find-if (lambda (entry)
                              (neo/buffer-match-p (car entry) buffer))
                            display-buffer-alist)))
@@ -93,16 +109,30 @@ If SIDE is non-nil, checks if it targets that specific SIDE."
              (alist (cdr action)))
         (when (or (memq 'display-buffer-in-side-window functions)
                   (memq 'neo--display-and-select functions))
-          (if side
-              (eq side (alist-get 'side alist))
-            t))))))
+          alist)))))
 
-(defun neo/get-side-window-buffers (&optional side)
+(defun neo/buffer-targets-side-window-p (buffer &optional side)
+  "Return non-nil if BUFFER is configured to be displayed in a side window.
+If SIDE is non-nil, checks if it targets that specific SIDE."
+  (when-let* ((alist (neo/buffer-side-window-alist buffer)))
+    (if side
+        (eq side (alist-get 'side alist))
+      t)))
+
+(defun neo/buffer-persistent-side-window-p (buffer)
+  "Return non-nil if BUFFER was registered with `neo/side-window' :persistent t."
+  (when-let* ((alist (neo/buffer-side-window-alist buffer)))
+    (alist-get 'persistent alist)))
+
+(defun neo/get-side-window-buffers (&optional side persistent-only)
   "Return a list of all live buffers that target a side window.
 If SIDE is non-nil (one of 'left, 'right, 'top, 'bottom), return only
-buffers targeting that side."
+buffers targeting that side. If PERSISTENT-ONLY is non-nil, only
+include buffers registered with `neo/side-window' :persistent t."
   (cl-loop for buf in (buffer-list)
-           when (neo/buffer-targets-side-window-p buf side)
+           when (and (neo/buffer-targets-side-window-p buf side)
+                     (or (not persistent-only)
+                         (neo/buffer-persistent-side-window-p buf)))
            collect buf))
 
 (provide 'neo-window)
