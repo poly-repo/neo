@@ -5,6 +5,16 @@
 
 (defconst neo/config-db-filename "neo.sqlite")
 
+(defvar neo/config-directory
+  (expand-file-name (neo/get-emacs-instance-name)
+                    (or (getenv "XDG_CONFIG_HOME") "~/.config"))
+  "Per-instance XDG config directory for Neo.
+
+`early-init.el' normally establishes this before `neo-config.el' is
+required.  This fallback keeps batch tests and direct library loads from
+failing on an unbound variable when they require `neo-config.el'
+without the full startup sequence.")
+
 (defvar neo/config-db-handle nil
   "Handle to the SQLite database.")
 
