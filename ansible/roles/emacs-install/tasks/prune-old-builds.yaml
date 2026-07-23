@@ -1,12 +1,13 @@
 ---
-# Keep only the newest up to `emacs_keep_daily_builds` *days* of date-stamped
-# daily master builds under ~/.local; delete the rest. Build directories are named
+# Keep the newest up to `emacs_keep_daily_builds` *days* of date-stamped daily
+# master builds under ~/.local, plus the exact daily build selected by
+# ~/.local/emacs-master-stable. Build directories are named
 # emacs-master-YYYY-MM-DD[-suffix] (see build-emacs.yaml), and a single day can
-# now produce more than one variant (e.g. -lucid and -gtk3). Retention is
-# therefore computed over distinct dates, not directory count, so keeping N
-# days always keeps every variant built on those days. The undated legacy
-# directory (emacs-master-<suffix>) does not match the pattern and is left
-# alone.
+# produce more than one variant (e.g. -lucid and -gtk3). The stable build's date
+# does not consume one of the retained daily slots, and only the symlink target
+# is exempted on that date, so an unselected toolkit variant can still be
+# pruned. The undated legacy directory (emacs-master-<suffix>) does not match
+# the pattern and is left alone.
 
 - name: Find date-stamped daily master Emacs builds
   ansible.builtin.find:
@@ -16,15 +17,31 @@
     recurse: false
   register: daily_master_builds
 
+- name: Inspect stable master Emacs symlink
+  ansible.builtin.stat:
+    path: "{{ ansible_user_dir }}/.local/emacs-master-stable"
+    follow: false
+  register: stable_master_build
+
 - name: Initialize daily master build retention state
   set_fact:
     emacs_daily_builds_by_date: []
+    emacs_stable_daily_build_path: ""
+    emacs_stable_daily_build_date: ""
     emacs_daily_build_dates_sorted: []
+    emacs_daily_build_dates_for_retention: []
     emacs_daily_dates_keep_count: 0
     emacs_daily_dates_prune_count: 0
     emacs_daily_dates_to_keep: []
     emacs_daily_dates_to_remove: []
     emacs_daily_builds_to_remove: []
+
+- name: Resolve stable daily master Emacs build
+  set_fact:
+    emacs_stable_daily_build_path: "{{ stable_master_build.stat.lnk_source }}"
+  when:
+    - stable_master_build.stat.islnk | default(false)
+    - stable_master_build.stat.lnk_source in (daily_master_builds.files | map(attribute='path') | list)
 
 - name: Pair each build directory with its embedded date
   set_fact:
@@ -37,34 +54,63 @@
   set_fact:
     emacs_daily_build_dates_sorted: "{{ emacs_daily_builds_by_date | map(attribute='date') | unique | sort | list }}"
 
+- name: Identify the stable daily master build date
+  set_fact:
+    emacs_stable_daily_build_date: >-
+      {{ emacs_daily_builds_by_date
+         | selectattr('path', 'equalto', emacs_stable_daily_build_path)
+         | map(attribute='date')
+         | first
+         | default('') }}
+
+- name: Exclude the stable build date from daily retention slots
+  set_fact:
+    emacs_daily_build_dates_for_retention: >-
+      {{ emacs_daily_build_dates_sorted
+         | reject('equalto', emacs_stable_daily_build_date)
+         | list }}
+
 - name: Compute how many daily master build dates to keep
   set_fact:
-    emacs_daily_dates_keep_count: "{{ [emacs_daily_build_dates_sorted | length, emacs_keep_daily_builds | int] | min }}"
+    emacs_daily_dates_keep_count: "{{ [emacs_daily_build_dates_for_retention | length, emacs_keep_daily_builds | int] | min }}"
 
 - name: Select the newest daily master build dates to keep
   set_fact:
-    emacs_daily_dates_to_keep: "{{ emacs_daily_build_dates_sorted[-(emacs_daily_dates_keep_count | int):] if (emacs_daily_dates_keep_count | int) > 0 else [] }}"
+    emacs_daily_dates_to_keep: "{{ emacs_daily_build_dates_for_retention[-(emacs_daily_dates_keep_count | int):] if (emacs_daily_dates_keep_count | int) > 0 else [] }}"
 
 - name: Compute how many daily master build dates to prune
   set_fact:
-    # Keep up to the newest N dates; prune only the older remainder.
-    emacs_daily_dates_prune_count: "{{ (emacs_daily_build_dates_sorted | length) - (emacs_daily_dates_keep_count | int) }}"
+    # Keep up to the newest N non-stable dates; prune only the older remainder.
+    emacs_daily_dates_prune_count: "{{ (emacs_daily_build_dates_for_retention | length) - (emacs_daily_dates_keep_count | int) }}"
 
 - name: Select the oldest daily master build dates for removal
   set_fact:
-    emacs_daily_dates_to_remove: "{{ emacs_daily_build_dates_sorted[:emacs_daily_dates_prune_count | int] }}"
+    emacs_daily_dates_to_remove: >-
+      {{ (emacs_daily_build_dates_for_retention[:emacs_daily_dates_prune_count | int]
+          + ([emacs_stable_daily_build_date] if emacs_stable_daily_build_date | length > 0 else []))
+         | unique
+         | sort
+         | list }}
 
-- name: Select every build directory (any variant) for the pruned dates
+- name: Select pruned build directories except the stable symlink target
   set_fact:
-    emacs_daily_builds_to_remove: "{{ emacs_daily_builds_by_date | selectattr('date', 'in', emacs_daily_dates_to_remove) | map(attribute='path') | list }}"
+    emacs_daily_builds_to_remove: >-
+      {{ emacs_daily_builds_by_date
+         | selectattr('date', 'in', emacs_daily_dates_to_remove)
+         | rejectattr('path', 'equalto', emacs_stable_daily_build_path)
+         | map(attribute='path')
+         | list }}
 
 - name: Report daily master build retention
   ansible.builtin.debug:
     msg: >-
       Found {{ daily_master_builds.files | length }} daily master build(s)
       across {{ emacs_daily_build_dates_sorted | length }} day(s);
-      keeping newest up to {{ emacs_keep_daily_builds }} day(s)
+      keeping newest up to {{ emacs_keep_daily_builds }} non-stable day(s)
       ({{ emacs_daily_dates_to_keep | length }} available this run),
+      plus stable build
+      {{ emacs_stable_daily_build_path | basename
+         if emacs_stable_daily_build_path | length > 0 else 'none' }};
       removing {{ emacs_daily_builds_to_remove | length }} build(s)
       from {{ emacs_daily_dates_to_remove | length }} day(s):
       {{ emacs_daily_builds_to_remove | map('basename') | list }}

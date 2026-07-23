@@ -5,12 +5,13 @@ requested_emacs_version: ""
 emacs_git_repo_url: "https://github.com/emacs-mirror/emacs.git"
 emacs_build_root: "{{ ansible_user_dir }}/.cache/emacs-builds"
 
-# Maximum number of days of date-stamped daily "master" builds to keep under
-# ~/.local, regardless of how many variants (e.g. -lucid, -gtk3) were built
-# on a given day. Older days (emacs-master-YYYY-MM-DD-*) are pruned after a
-# run, all their variants together. If fewer than N days exist (for example on
-# a fresh system that has only built today), keep whatever exists. The undated
-# legacy build (emacs-master-<suffix>) is never touched.
+# Maximum number of non-stable days of date-stamped daily "master" builds to
+# keep under ~/.local, regardless of how many variants (e.g. -lucid, -gtk3)
+# were built on a retained day. The exact daily build targeted by
+# ~/.local/emacs-master-stable is kept in addition to this limit; another
+# toolkit variant from the stable build's date is not protected by that
+# symlink. If fewer than N non-stable days exist, keep whatever exists. The
+# undated legacy build (emacs-master-<suffix>) is never touched.
 emacs_keep_daily_builds: 3
 
 # Fallback workaround for upstream bug#81332 ("No rule to make target

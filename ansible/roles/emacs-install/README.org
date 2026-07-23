@@ -24,9 +24,10 @@ package is required.
 - =emacs_versions= (vars/main.yaml): the list of Emacs builds (master + the
   configured releases) with their =configure= flags and tree-sitter version.
 - =emacs_keep_daily_builds= (default =3=): the maximum number of
-  date-stamped daily =master= build days to keep under =~/.local=. If fewer
-  than that exist, keep whatever is available. See "Daily master builds"
-  below.
+  non-stable date-stamped daily =master= build days to keep under =~/.local=.
+  The daily build targeted by =~/.local/emacs-master-stable= is retained in
+  addition to those days. If fewer than that exist, keep whatever is
+  available. See "Daily master builds" below.
 
 ** Dependencies
 
@@ -47,10 +48,14 @@ variables passed in as parameters) is always nice for users too:
 
 The =master= build installs to =~/.local/emacs-master-YYYY-MM-DD[-suffix]= and
 is skipped when today's directory already exists, so it is effectively one
-build per day. After each run the role prunes these date-stamped directories
-down to the newest =emacs_keep_daily_builds= *at most*; on a fresh system that
-has only built today, that means keeping just today's build. The undated
-legacy =emacs-master-<suffix>= is never touched.
+build per day and toolkit variant. After each run the role keeps the newest
+=emacs_keep_daily_builds= non-stable days plus the exact daily build targeted
+by =~/.local/emacs-master-stable=. The stable build does not consume a daily
+slot; only its selected toolkit variant is protected, so if the symlink points
+to =-gtk3=, the same day's =-lucid= build can be removed, and vice versa. On a
+fresh system with fewer than the configured number of non-stable days, the
+role keeps whatever exists. The undated legacy =emacs-master-<suffix>= is
+never touched.
 
 To build one automatically every day, two scripts live in
 =infra/ansible/scripts/=:
