@@ -32,6 +32,8 @@
 # ansible-playbook infra/ansible/playbooks/omega-developer/omega-developer.yaml --skip-tags-slow
 
 - hosts: localhost
+  # Target registration is required even when callers select a role tag.
+  tags: [always]
   gather_facts: false
   vars:
     requested_target_vm: "{{ target_vm | default('') }}"

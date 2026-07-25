@@ -117,7 +117,7 @@ if emacs_needs_build; then
     build_reply=$?
     set -e
 
-    manual_build_cmd="ANSIBLE_CONFIG=\"$NEO_DIR/ansible.cfg\" ansible-playbook \"$NEO_DIR/ansible/playbooks/emacs/emacs.yaml\" -e emacs_version_name=master-gtk3 --tags emacs -K"
+    manual_build_cmd="ANSIBLE_CONFIG=\"$NEO_DIR/ansible.cfg\" ansible-playbook \"$NEO_DIR/ansible/playbooks/emacs/emacs.yaml\" -e emacs_version_name=master-gtk3 --tags emacs"
 
     if [ "$build_reply" -eq 2 ]; then
         echo "Non-interactive shell (no /dev/tty); skipping the build offer."
@@ -139,7 +139,7 @@ if emacs_needs_build; then
 
         export ANSIBLE_CONFIG="$NEO_DIR/ansible.cfg"
         "$ANSIBLE_PLAYBOOK_BIN" "$NEO_DIR/ansible/playbooks/emacs/emacs.yaml" \
-            -e emacs_version_name=master-gtk3 --tags emacs -K
+            -e emacs_version_name=master-gtk3 --tags emacs
 
         set +e
         ask_yes_no "Install a daily cron job to keep this Emacs build fresh?"
