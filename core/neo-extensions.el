@@ -703,7 +703,53 @@ AVAILABLE-EXTENSIONS hash table (defaulting to `neo--extensions`), and loads it 
                 (neo/log-warn 'core "  ❌ Extension %s file not found or failed to load" slug-string)))
           (neo/log-warn 'core "  ❌ Extension %s not found in registry" slug-string))))))
 
-;; TODO only fetch if older than X hours unless FORCE is used.
+(defun neo--extensions-checksum-value (checksum-file)
+  "Return the SHA256 digest recorded in CHECKSUM-FILE."
+  (with-temp-buffer
+    (insert-file-contents checksum-file)
+    (goto-char (point-min))
+    (unless (looking-at "\\([[:xdigit:]]\\{64\\}\\)\\(?:[[:space:]]\\|\\'\\)")
+      (error "Invalid SHA256 checksum file: %s" checksum-file))
+    (downcase (match-string 1))))
+
+(defun neo--extensions-file-sha256 (file)
+  "Return the SHA256 digest of FILE."
+  (with-temp-buffer
+    (insert-file-contents-literally file)
+    (secure-hash 'sha256 (current-buffer))))
+
+(defun neo--extensions-verify-manifest (manifest-file checksum-file)
+  "Verify MANIFEST-FILE against CHECKSUM-FILE or signal an error."
+  (let ((expected (neo--extensions-checksum-value checksum-file))
+        (actual (neo--extensions-file-sha256 manifest-file)))
+    (unless (string= expected actual)
+      (error "SHA256 mismatch for %s: expected %s, got %s"
+             manifest-file expected actual))
+    t))
+
+(defun neo--extensions-download-verified-manifest
+    (manifest-url checksum-url manifest-file checksum-file)
+  "Download and verify a manifest before installing it in the cache."
+  (let ((temporary-manifest
+         (make-temp-file
+          (expand-file-name ".extensions-manifest-"
+                            (file-name-directory manifest-file))))
+        (temporary-checksum
+         (make-temp-file
+          (expand-file-name ".extensions-checksum-"
+                            (file-name-directory checksum-file)))))
+    (unwind-protect
+        (progn
+          (url-copy-file checksum-url temporary-checksum t)
+          (url-copy-file manifest-url temporary-manifest t)
+          (neo--extensions-verify-manifest temporary-manifest temporary-checksum)
+          (rename-file temporary-checksum checksum-file t)
+          (rename-file temporary-manifest manifest-file t))
+      (when (file-exists-p temporary-manifest)
+        (delete-file temporary-manifest))
+      (when (file-exists-p temporary-checksum)
+        (delete-file temporary-checksum)))))
+
 (defun neo/fetch-extensions (registry)
   "Download and cache the latest extensions manifest for REGISTRY.
 Manifest goes to ~/.cache/<instance>/extensions/<REGISTRY>/extensions-<SHA>.el.
@@ -716,7 +762,7 @@ Repository content is also updated."
       (unless (file-directory-p cache-dir)
         (make-directory cache-dir t))
       (condition-case err
-          (let* ((release (neo--latest-registry-release registry))
+          (let* ((release (neo--latest-registry-release registry t))
                  (sha (neo--registry-release-sha release))
                  (filename (format "extensions-%s.el" sha))
                  (sha-filename (format "extensions-%s.el.sha256" sha))
@@ -724,36 +770,26 @@ Repository content is also updated."
                  (target-sha-file (expand-file-name sha-filename cache-dir))
                  (file-url (neo--registry-release-manifest-url release))
                  (sha-url (neo--registry-release-checksum-url release)))
-            (unless (file-exists-p target-file)
-              (message "[neo] Downloading %s extensions manifest version %s..." name sha)
+            (unless (and (file-exists-p target-file)
+                         (file-exists-p target-sha-file)
+                         (condition-case nil
+                             (neo--extensions-verify-manifest
+                              target-file target-sha-file)
+                           (error nil)))
+              (message "[neo] Downloading %s extensions manifest version %s..."
+                       name sha)
+              (neo--extensions-download-verified-manifest
+               file-url sha-url target-file target-sha-file)
+              (message "[neo] Manifest downloaded and verified."))
 
-              ;; Download SHA file (checksum)
-              (ignore-errors (delete-file target-sha-file))
-              (url-copy-file sha-url target-sha-file t)
-
-              ;; Download Manifest
-              (url-copy-file file-url target-file t)
-
-              ;; Check for invalid download (GitHub release 404 returns "Not Found")
-              (with-temp-buffer
-                (insert-file-contents target-file)
-                (goto-char (point-min))
-                (when (search-forward "Not Found" nil t)
-                  (delete-file target-file)
-                  (error "[neo] Failed to download manifest from %s (got 'Not Found')" file-url)))
-
-              (message "[neo] Manifest downloaded."))
-
-            ;; Update symlinks
-            (let ((default-directory cache-dir))
-              (ignore-errors (delete-file "extensions-current.el"))
-              (make-symbolic-link filename "extensions-current.el" t)
-              (ignore-errors (delete-file "extensions-current.el.sha256"))
-              (make-symbolic-link sha-filename "extensions-current.el.sha256" t))
-
-            ;; Ensure repository content is also downloaded
+            ;; Do not activate the manifest until its matching repository
+            ;; content has been downloaded and extracted successfully.
             (neo/download-registry-content registry sha)
 
+            (let ((default-directory cache-dir))
+              (make-symbolic-link filename "extensions-current.el" t)
+              (make-symbolic-link sha-filename
+                                  "extensions-current.el.sha256" t))
             target-file)
         (error
          (if (file-exists-p cached-manifest-path)
@@ -894,9 +930,28 @@ If the config file does not exist, it displays a welcome message."
    "\\`extensions-[a-f0-9]\\{40\\}\\.el\\'"
    (alist-get 'name asset)))
 
-(defun neo--latest-registry-release (registry)
-  "Return the latest published release metadata for REGISTRY."
+(defun neo--extensions-release-checksum-asset (manifest-asset assets)
+  "Return the exact checksum pair for MANIFEST-ASSET from ASSETS."
+  (let ((checksum-name (concat (alist-get 'name manifest-asset) ".sha256")))
+    (cl-find-if
+     (lambda (asset)
+       (equal (alist-get 'name asset) checksum-name))
+     assets)))
+
+(defun neo--extensions-release-manifest-asset-newer-p (left right)
+  "Return non-nil when release asset LEFT is newer than RIGHT."
+  (let ((left-created-at (alist-get 'created_at left))
+        (right-created-at (alist-get 'created_at right)))
+    (if (string= left-created-at right-created-at)
+        (string< (alist-get 'name left) (alist-get 'name right))
+      (string< right-created-at left-created-at))))
+
+(defun neo--latest-registry-release (registry &optional refresh)
+  "Return the latest published release metadata for REGISTRY.
+When REFRESH is non-nil, discard cached metadata and query GitHub again."
   (let ((registry-url (neo--extension-registry-url registry)))
+    (when refresh
+      (remhash registry-url neo--registry-release-cache))
     (or (gethash registry-url neo--registry-release-cache)
         (let* ((repo-slug (neo--github-repository-slug registry))
                (release
@@ -904,26 +959,26 @@ If the config file does not exist, it displays a welcome message."
                  (format "https://api.github.com/repos/%s/releases/latest"
                          repo-slug)))
                (assets (alist-get 'assets release))
+               (manifest-assets
+                (cl-remove-if-not
+                 (lambda (asset)
+                   (and (neo--release-manifest-asset-p asset)
+                        (stringp (alist-get 'created_at asset))
+                        (neo--extensions-release-checksum-asset asset assets)))
+                 assets))
                (manifest-asset
-                (cl-find-if #'neo--release-manifest-asset-p assets)))
+                (car (cl-sort (copy-sequence manifest-assets)
+                              #'neo--extensions-release-manifest-asset-newer-p))))
           (unless manifest-asset
-            (error "No extensions manifest asset found in latest release for %s"
+            (error "No extensions manifest with a checksum asset found in latest release for %s"
                    repo-slug))
           (let* ((manifest-name (alist-get 'name manifest-asset))
-                 (checksum-name (concat manifest-name ".sha256"))
                  (checksum-asset
-                  (cl-find-if
-                   (lambda (asset)
-                     (equal (alist-get 'name asset) checksum-name))
-                   assets)))
+                  (neo--extensions-release-checksum-asset manifest-asset assets)))
             (unless (string-match
                      "\\`extensions-\\([a-f0-9]\\{40\\}\\)\\.el\\'"
                      manifest-name)
               (error "Unexpected manifest asset name: %s" manifest-name))
-            (unless checksum-asset
-              (error "Missing checksum asset %s in latest release for %s"
-                     checksum-name
-                     repo-slug))
             (let ((release-info
                    (make-neo--registry-release
                     :sha (match-string 1 manifest-name)
@@ -940,29 +995,37 @@ If the config file does not exist, it displays a welcome message."
          (download-url (format "%s/archive/%s.tar.gz" base-url commit-sha)))
     download-url))
 
-;; TODO maybe we should add commit-sha ourselves
 (defun neo--download-github-tarfile (registry commit-sha target-dir)
-  "Download REPO-URL at COMMIT-SHA, untar to TARGET-DIR stripping STRIP-LEVELS.
-
-We assume that target-dir contains commit-sha"
+  "Download REGISTRY at COMMIT-SHA and extract it into TARGET-DIR."
   (if (file-directory-p target-dir)
-      (message "Registry content already exists at %s; skipping download." target-dir)
-(make-directory target-dir t)
-(let ((temp-file (make-temp-file "neo-" nil ".tar.gz")))
-  (unwind-protect
-      (progn
-        ;; --- BODY ---
-        ;; 1. Download to temp-file
-        ;; 2. Untar temp-file
-	(url-copy-file (neo--archive-url registry commit-sha) temp-file t)
-	(let ((default-directory (expand-file-name target-dir)))
-	  (message "Expanding in %s" default-directory)
-	  (call-process "tar" nil nil nil 
-	                "-xzf" temp-file 
-	                "--strip-components=3")))
-    (when (file-exists-p temp-file)
-      (delete-file temp-file)
-      (message "Deleted %s" temp-file))))))
+      (message "Registry content already exists at %s; skipping download."
+               target-dir)
+    (let* ((parent-directory
+            (file-name-directory (directory-file-name target-dir)))
+           (temporary-file (make-temp-file "neo-" nil ".tar.gz"))
+           temporary-directory)
+      (make-directory parent-directory t)
+      (setq temporary-directory
+            (make-temp-file
+             (expand-file-name ".neo-registry-" parent-directory) t))
+      (unwind-protect
+          (progn
+            (url-copy-file (neo--archive-url registry commit-sha)
+                           temporary-file t)
+            (let ((default-directory temporary-directory))
+              (message "Expanding in %s" default-directory)
+              (unless (zerop
+                       (call-process "tar" nil nil nil
+                                     "-xzf" temporary-file
+                                     "--strip-components=3"))
+                (error "Failed to extract registry archive for %s"
+                       commit-sha)))
+            (rename-file temporary-directory target-dir))
+        (when (and temporary-directory
+                   (file-directory-p temporary-directory))
+          (delete-directory temporary-directory t))
+        (when (file-exists-p temporary-file)
+          (delete-file temporary-file))))))
 
 ;; Update the 'current' symlink to point to this version
 (defun neo/download-registry-content (registry commit-sha)

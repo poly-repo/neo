@@ -170,6 +170,7 @@ been loaded; rendering its card before that must not crash the caller."
               `((assets . [((name . "notes.txt")
                             (browser_download_url . "https://example.invalid/notes.txt"))
                            ((name . ,manifest-name)
+                            (created_at . "2026-07-25T12:00:00Z")
                             (browser_download_url . ,manifest-url))
                            ((name . ,checksum-name)
                             (browser_download_url . ,checksum-url))]))))
@@ -190,12 +191,101 @@ been loaded; rendering its card before that must not crash the caller."
       (when (buffer-live-p response-buffer)
         (kill-buffer response-buffer)))))
 
+(ert-deftest neo/latest-registry-release-selects-newest-complete-pair ()
+  "Select the newest manifest with an exact checksum pair."
+  (let* ((older-sha "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+         (newer-sha "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+         (unpaired-sha "cccccccccccccccccccccccccccccccccccccccc")
+         (older-name (format "extensions-%s.el" older-sha))
+         (newer-name (format "extensions-%s.el" newer-sha))
+         (unpaired-name (format "extensions-%s.el" unpaired-sha))
+         (registry
+          (make-neo--extension-registry
+           :name "neo"
+           :url "https://github.com/poly-repo/neo-extensions.git"))
+         (neo--registry-release-cache (make-hash-table :test #'equal)))
+    (cl-letf (((symbol-function 'neo--github-api-get-json)
+               (lambda (_url)
+                 `((assets
+                    . (((name . ,older-name)
+                        (created_at . "2026-07-20T12:00:00Z")
+                        (browser_download_url . "https://example.invalid/older"))
+                       ((name . ,(concat older-name ".sha256"))
+                        (browser_download_url . "https://example.invalid/older.sha256"))
+                       ((name . ,unpaired-name)
+                        (created_at . "2026-07-25T12:00:00Z")
+                        (browser_download_url . "https://example.invalid/unpaired"))
+                       ((name . ,newer-name)
+                        (created_at . "2026-07-24T12:00:00Z")
+                        (browser_download_url . "https://example.invalid/newer"))
+                       ((name . ,(concat newer-name ".sha256"))
+                        (browser_download_url . "https://example.invalid/newer.sha256"))))))))
+      (let ((release (neo--latest-registry-release registry)))
+        (should (equal (neo--registry-release-sha release) newer-sha))
+        (should (equal (neo--registry-release-manifest-url release)
+                       "https://example.invalid/newer"))))))
+
+(ert-deftest neo/latest-registry-release-requires-checksum-pair ()
+  "Reject a release that has no complete manifest and checksum pair."
+  (let* ((sha "dddddddddddddddddddddddddddddddddddddddd")
+         (registry
+          (make-neo--extension-registry
+           :name "neo"
+           :url "https://github.com/poly-repo/neo-extensions.git"))
+         (neo--registry-release-cache (make-hash-table :test #'equal)))
+    (cl-letf (((symbol-function 'neo--github-api-get-json)
+               (lambda (_url)
+                 `((assets
+                    . (((name . ,(format "extensions-%s.el" sha))
+                        (created_at . "2026-07-25T12:00:00Z")
+                        (browser_download_url . "https://example.invalid/manifest"))))))))
+      (should-error (neo--latest-registry-release registry)
+                    :type 'error))))
+
+(ert-deftest neo/latest-registry-release-can-refresh-cached-metadata ()
+  "Refresh release metadata when explicitly requested."
+  (let* ((older-sha "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+         (newer-sha "ffffffffffffffffffffffffffffffffffffffff")
+         (registry
+          (make-neo--extension-registry
+           :name "neo"
+           :url "https://github.com/poly-repo/neo-extensions.git"))
+         (neo--registry-release-cache (make-hash-table :test #'equal))
+         (responses
+          (list
+           `((assets
+              . (((name . ,(format "extensions-%s.el" older-sha))
+                  (created_at . "2026-07-20T12:00:00Z")
+                  (browser_download_url . "https://example.invalid/older"))
+                 ((name . ,(format "extensions-%s.el.sha256" older-sha))
+                  (browser_download_url . "https://example.invalid/older.sha256")))))
+           `((assets
+              . (((name . ,(format "extensions-%s.el" newer-sha))
+                  (created_at . "2026-07-25T12:00:00Z")
+                  (browser_download_url . "https://example.invalid/newer"))
+                 ((name . ,(format "extensions-%s.el.sha256" newer-sha))
+                  (browser_download_url . "https://example.invalid/newer.sha256"))))))))
+    (cl-letf (((symbol-function 'neo--github-api-get-json)
+               (lambda (_url)
+                 (pop responses))))
+      (should (equal (neo--registry-release-sha
+                      (neo--latest-registry-release registry))
+                     older-sha))
+      (should (equal (neo--registry-release-sha
+                      (neo--latest-registry-release registry))
+                     older-sha))
+      (should (equal (neo--registry-release-sha
+                      (neo--latest-registry-release registry t))
+                     newer-sha)))))
+
 (ert-deftest neo/fetch-extensions-uses-published-release-sha ()
   "Fetch the manifest and content using the published release SHA."
   (let* ((cache-root (make-temp-file "neo-extensions-cache-" t))
          (sha "abcdef1234567890abcdef1234567890abcdef12")
          (manifest-url (format "https://example.invalid/extensions-%s.el" sha))
          (checksum-url (format "%s.sha256" manifest-url))
+         (manifest-content ";;; -*- lexical-binding: t -*-\n")
+         (manifest-checksum (secure-hash 'sha256 manifest-content))
          (registry
           (make-neo--extension-registry
            :name "mav"
@@ -207,7 +297,7 @@ been loaded; rendering its card before that must not crash the caller."
                    (lambda ()
                      "neo"))
                   ((symbol-function 'neo--latest-registry-release)
-                   (lambda (_registry)
+                   (lambda (_registry &optional _refresh)
                      (make-neo--registry-release
                       :sha sha
                       :manifest-url manifest-url
@@ -219,9 +309,9 @@ been loaded; rendering its card before that must not crash the caller."
                    (lambda (source target &optional _ok-if-exists _keep-time)
                      (push source copied-urls)
                      (with-temp-file target
-                       (insert (if (string-suffix-p ".sha256" target)
-                                   "checksum"
-                                 ";;; -*- lexical-binding: t -*-\n")))
+                       (insert (if (string-suffix-p ".sha256" source)
+                                   manifest-checksum
+                                 manifest-content)))
                      target))
                   ((symbol-function 'neo/download-registry-content)
                    (lambda (_registry commit-sha)
@@ -241,6 +331,86 @@ been loaded; rendering its card before that must not crash the caller."
             (should (file-symlink-p manifest-link))
             (should (equal (file-symlink-p manifest-link)
                            (format "extensions-%s.el" sha)))))
+      (delete-directory cache-root t))))
+
+(ert-deftest neo/fetch-extensions-rejects-checksum-mismatch ()
+  "Do not activate a downloaded manifest with a bad checksum."
+  (let* ((cache-root (make-temp-file "neo-extensions-cache-" t))
+         (sha "0123456789abcdef0123456789abcdef01234567")
+         (registry
+          (make-neo--extension-registry
+           :name "mav"
+           :url "https://github.com/poly-repo/mav-extensions.git"))
+         downloaded-content)
+    (unwind-protect
+        (cl-letf (((symbol-function 'neo/get-emacs-instance-name)
+                   (lambda () "neo"))
+                  ((symbol-function 'neo--latest-registry-release)
+                   (lambda (_registry &optional _refresh)
+                     (make-neo--registry-release
+                      :sha sha
+                      :manifest-url "https://example.invalid/manifest"
+                      :checksum-url "https://example.invalid/checksum")))
+                  ((symbol-function 'neo/cache-file-path)
+                   (lambda (path)
+                     (expand-file-name path cache-root)))
+                  ((symbol-function 'url-copy-file)
+                   (lambda (source target &optional _ok-if-exists _keep-time)
+                     (with-temp-file target
+                       (insert (if (string-suffix-p "checksum" source)
+                                   (make-string 64 ?0)
+                                 "manifest")))
+                     target))
+                  ((symbol-function 'neo/download-registry-content)
+                   (lambda (&rest _args)
+                     (setq downloaded-content t)))
+                  ((symbol-function 'neo/log-error)
+                   (lambda (&rest _args))))
+          (let* ((cache-dir (expand-file-name "extensions/mav/" cache-root))
+                 (manifest-link
+                  (expand-file-name "extensions-current.el" cache-dir)))
+            (should-not (neo/fetch-extensions registry))
+            (should-not downloaded-content)
+            (should-not (file-exists-p manifest-link))))
+      (delete-directory cache-root t))))
+
+(ert-deftest neo/download-github-tarfile-retries-after-extraction-failure ()
+  "Leave no target directory when extraction fails, so retry can succeed."
+  (let* ((cache-root (make-temp-file "neo-extensions-content-" t))
+         (target-dir (expand-file-name "content" cache-root))
+         (registry
+          (make-neo--extension-registry
+           :name "neo"
+           :url "https://github.com/poly-repo/neo-extensions.git"))
+         (attempt 0))
+    (unwind-protect
+        (cl-letf (((symbol-function 'url-copy-file)
+                   (lambda (_source target &optional _ok-if-exists _keep-time)
+                     (with-temp-file target
+                       (insert "archive"))
+                     target))
+                  ((symbol-function 'call-process)
+                   (lambda (&rest _args)
+                     (setq attempt (1+ attempt))
+                     (if (= attempt 1)
+                         1
+                       (with-temp-file
+                           (expand-file-name
+                            "extension.el"
+                            (car (directory-files
+                                  cache-root t
+                                  "\\`\\.neo-registry-" t)))
+                         (insert "extension"))
+                       0))))
+          (should-error
+           (neo--download-github-tarfile
+            registry "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" target-dir)
+           :type 'error)
+          (should-not (file-exists-p target-dir))
+          (neo--download-github-tarfile
+           registry "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" target-dir)
+          (should (file-exists-p
+                   (expand-file-name "extension.el" target-dir))))
       (delete-directory cache-root t))))
 
 (ert-deftest neo/fetch-extensions-returns-nil-when-uncached-and-unreachable ()
@@ -263,7 +433,7 @@ instead log the failure and return nil."
                    (lambda ()
                      "neo"))
                   ((symbol-function 'neo--latest-registry-release)
-                   (lambda (_registry)
+                   (lambda (_registry &optional _refresh)
                      (error "[neo] Could not reach GitHub")))
                   ((symbol-function 'neo/cache-file-path)
                    (lambda (path)
