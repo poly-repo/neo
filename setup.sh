@@ -3,6 +3,37 @@
 
 set -euo pipefail
 
+update_neo_checkout() {
+    local target_dir="$1"
+    local upstream="origin/main"
+
+    git -C "$target_dir" fetch origin main
+
+    if git -C "$target_dir" merge-base --is-ancestor HEAD "$upstream"; then
+        git -C "$target_dir" merge --ff-only "$upstream"
+        return
+    fi
+
+    if [ -n "$(git -C "$target_dir" status --porcelain --untracked-files=all)" ]; then
+        echo "ERROR: $target_dir has local changes and its remote history was replaced." >&2
+        echo "Preserve or remove those changes, then run setup.sh again." >&2
+        return 1
+    fi
+
+    local old_head
+    local backup_branch
+    old_head="$(git -C "$target_dir" rev-parse HEAD)"
+    backup_branch="neo-setup-backup-${old_head:0:12}"
+
+    if ! git -C "$target_dir" show-ref --verify --quiet \
+        "refs/heads/$backup_branch"; then
+        git -C "$target_dir" branch "$backup_branch" "$old_head"
+    fi
+
+    echo "Remote history changed; preserving the previous checkout as $backup_branch."
+    git -C "$target_dir" reset --hard "$upstream"
+}
+
 # ==============================================================================
 #  NEO SETUP
 #  
@@ -24,7 +55,7 @@ if [ ! -d "$TARGET_DIR" ]; then
     git clone "$REPO_URL" "$TARGET_DIR"
 elif [ -d "$TARGET_DIR/.git" ]; then
     echo "Directory $TARGET_DIR exists and is a git repo. Pulling updates..."
-    git -C "$TARGET_DIR" pull
+    update_neo_checkout "$TARGET_DIR"
 else
     echo "Directory $TARGET_DIR exists but is not a git repository. Assuming it was synced locally and skipping git update."
 fi
