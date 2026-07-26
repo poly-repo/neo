@@ -175,8 +175,8 @@ use this command when two different Emacs binaries report the SAME version
  ;; Enable :ensure support backed by Elpaca recipes.
  (elpaca-use-package-mode)
  ;; `use-package-always-ensure' must stay boolean because use-package wraps
- ;; defaults again before Elpaca sees them. `neo/use-package' adds the explicit
- ;; `:ensure (:wait t)' form for Neo-managed declarations that need waiting.
+ ;; defaults again before Elpaca sees them. `neo/use-package' adds an explicit
+ ;; asynchronous `:ensure t'; Neo drains the resulting queue at replay boundaries.
  (setq use-package-always-ensure t))
 
 ; compat is on GNU ELPA only; install via git to avoid needing the GNU ELPA cache

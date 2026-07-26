@@ -26,18 +26,42 @@ directly, so tests exercising this method stub the cross-module call
 the same way the dependency-order test below does."
   (let* ((neo/framework-bootstrapped-p nil)
          (hook-ran nil)
-         (hook-fn (lambda () (setq hook-ran neo/framework-bootstrapped-p)))
+         (wait-ran nil)
+         (hook-fn (lambda ()
+                    (setq hook-ran
+                          (and wait-ran neo/framework-bootstrapped-p))))
          (framework (make-neo-framework
                      :available-extensions (make-hash-table :test 'equal)
                      :installed-extensions (make-hash-table :test 'equal))))
     (unwind-protect
         (cl-letf (((symbol-function 'neo--collect-package-sources)
-                   (lambda (_sorted-slugs _installed-map _enabled-packages) nil)))
+                   (lambda (_sorted-slugs _installed-map _enabled-packages) nil))
+                  ((symbol-function 'elpaca-wait)
+                   (lambda () (setq wait-ran t))))
           (add-hook 'neo/after-framework-bootstrap-hook hook-fn)
           (neo/replay-installed-extensions-packages framework)
           (should neo/framework-bootstrapped-p)
+          (should wait-ran)
           (should hook-ran))
       (remove-hook 'neo/after-framework-bootstrap-hook hook-fn))))
+
+(ert-deftest neo/replay-installed-extensions-packages-waits-once-after-queueing ()
+  "Queue every merged declaration before one aggregate Elpaca wait."
+  (let* ((framework (make-neo-framework
+                     :available-extensions (make-hash-table :test 'equal)
+                     :installed-extensions (make-hash-table :test 'equal)))
+         (events nil))
+    (cl-letf (((symbol-function 'neo--collect-package-sources)
+               (lambda (_sorted-slugs _installed-map _enabled-packages)
+                 '((first-package . first-sources)
+                   (second-package . second-sources))))
+              ((symbol-function 'neo--replay-merged-package)
+               (lambda (name _sources) (push name events)))
+              ((symbol-function 'elpaca-wait)
+               (lambda () (push 'wait events))))
+      (neo/replay-installed-extensions-packages framework))
+    (should (equal (nreverse events)
+                   '(first-package second-package wait)))))
 
 (ert-deftest neo/replay-installed-extensions-packages-respects-dependency-order ()
   "Feed `neo--collect-package-sources' extensions in dependency order.
@@ -64,7 +88,8 @@ assert the fix (topo-sorting via `neo/topo-sort-from-roots') passes
     (cl-letf (((symbol-function 'neo--collect-package-sources)
                (lambda (sorted-slugs _installed-map _enabled-packages)
                  (setq captured-slugs sorted-slugs)
-                 nil)))
+                 nil))
+              ((symbol-function 'elpaca-wait) #'ignore))
       (neo/replay-installed-extensions-packages
        (make-neo-framework :available-extensions available
                            :installed-extensions installed)))

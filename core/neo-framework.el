@@ -134,7 +134,12 @@ separate ones (see `neo--merge-use-package-declarations')."
          (sorted-slugs (neo/topo-sort-from-roots available installed-slugs '(:on-missing ignore))))
     (setq neo--package-provenance-table (make-hash-table :test 'equal))
     (dolist (entry (neo--collect-package-sources sorted-slugs installed-map neo--enabled-packages))
-      (neo--replay-merged-package (car entry) (cdr entry))))
+      (neo--replay-merged-package (car entry) (cdr entry)))
+    ;; Elpaca installs every order in this queue concurrently, then finalizes
+    ;; queued use-package bodies in insertion order.  Since ENTRY order is
+    ;; dependency-first, this retains Neo's configuration ordering without
+    ;; introducing a package-sized queue barrier for every declaration.
+    (elpaca-wait))
   (setq neo/framework-bootstrapped-p t)
   (run-hooks 'neo/after-framework-bootstrap-hook))
 

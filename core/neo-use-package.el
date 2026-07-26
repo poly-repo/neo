@@ -25,11 +25,12 @@ contributed each surviving item. CONFLICTS is a list of
 `neo-merge-conflict' structs describing every value that was dropped."
   name sources merged-args-alist section-origins conflicts)
 
-(defconst neo--use-package-default-ensure '(:wait t)
+(defconst neo--use-package-default-ensure t
   "Default `:ensure' value injected by `neo/use-package'.
 Shared with the merge logic in `neo--merge-use-package-declarations' so
 it can recognize a framework-injected default vs. a real user-supplied
-recipe.")
+recipe.  The framework drains all queued declarations once after replay,
+instead of blocking Elpaca separately for each package.")
 
 (defconst neo--use-package-list-sections
   '(:config :init :hook :bind :bind* :custom-face :mode :interpreter
@@ -561,9 +562,11 @@ Pure -- no eval, no side effects."
 (defmacro neo/use-package (name &rest args)
   "Augment `use-package` with Neo-specific tracking and filtering.
 
-If the global variable neo/use-extensions is t, the use-package is
-immediately executed, otherwise the raw `use-package` form is stored in
-`neo--enabled-packages` indexed by (user . extension-base-name)."
+When `neo/use-extensions' is non-nil, store the raw `use-package' form in
+`neo--enabled-packages' indexed by (user . extension-base-name); framework
+replay later queues all stored packages together.  Otherwise execute the
+form immediately and wait for it, preserving the synchronous development
+path."
   (declare (indent defun))
   (let* ((args (neo--normalize-use-package-arguments args))
          (args (if (memq :ensure args)
@@ -580,6 +583,7 @@ immediately executed, otherwise the raw `use-package` form is stored in
          (real-form `(use-package ,name ,@args)))
     (if neo/use-extensions
 	`(setq neo--enabled-packages (neo--alist-push ',key ',real-form neo--enabled-packages))
-      `(eval ',real-form))))
+      `(prog1 (eval ',real-form)
+         (elpaca-wait)))))
 
 (provide 'neo-use-package)

@@ -34,11 +34,21 @@
 (defvar neo/use-extensions t)
 
 (ert-deftest neo/use-package-adds-ensure-by-default ()
-  "Default Neo package declarations to a synchronous Elpaca ensure."
+  "Default Neo package declarations to an asynchronous Elpaca ensure."
   (let ((load-file-name neo-use-package-test--file))
     (let ((expansion (prin1-to-string
                       (macroexpand-1 '(neo/use-package sample-package)))))
-      (should (string-match-p ":ensure (:wait t)" expansion)))))
+      (should (string-match-p ":ensure t" expansion))
+      (should-not (string-match-p ":wait" expansion)))))
+
+(ert-deftest neo/use-package-immediate-mode-waits-once ()
+  "Keep non-extension development evaluation synchronous."
+  (let ((load-file-name neo-use-package-test--file)
+        (neo/use-extensions nil))
+    (let ((expansion (prin1-to-string
+                      (macroexpand-1 '(neo/use-package sample-package)))))
+      (should (string-match-p ":ensure t" expansion))
+      (should (string-match-p "elpaca-wait" expansion)))))
 
 (ert-deftest neo/use-package-keeps-emacs-unensured ()
   "Keep built-in Emacs declarations out of Elpaca."
@@ -107,7 +117,7 @@
          (pairs (list (cons source-a (neo--sectioned-list->alist
                                        '(:ensure (:host github :repo "akermu/emacs-libvterm"))))
                       (cons source-b (neo--sectioned-list->alist
-                                       '(:ensure (:wait t) :custom (vterm-max-scrollback 100000))))))
+                                       '(:ensure t :custom (vterm-max-scrollback 100000))))))
          (provenance (neo--merge-use-package-declarations 'vterm pairs)))
     (should (equal (cdr (assoc :ensure (neo-package-provenance-merged-args-alist provenance)))
                    '((:host github :repo "akermu/emacs-libvterm"))))
@@ -123,8 +133,8 @@ merging removes the race by construction instead of relying on Elpaca
 queue timing."
   (let* ((source-a (cons "neo" "better-git"))
          (source-b (cons "neo" "programming-foundation"))
-         (pairs (list (cons source-a (neo--sectioned-list->alist '(:ensure (:wait t))))
-                      (cons source-b (neo--sectioned-list->alist '(:ensure (:wait t))))))
+         (pairs (list (cons source-a (neo--sectioned-list->alist '(:ensure t)))
+                      (cons source-b (neo--sectioned-list->alist '(:ensure t)))))
          (provenance (neo--merge-use-package-declarations 'transient pairs)))
     (should (equal (cdr (assoc :ensure (neo-package-provenance-merged-args-alist provenance)))
                    (list neo--use-package-default-ensure)))
@@ -286,7 +296,7 @@ queue timing."
          (pairs (list (cons source-a (neo--sectioned-list->alist
                                        '(:ensure (:host github :repo "akermu/emacs-libvterm"))))
                       (cons source-b (neo--sectioned-list->alist
-                                       '(:ensure (:wait t) :custom (vterm-max-scrollback 100000))))))
+                                       '(:ensure t :custom (vterm-max-scrollback 100000))))))
          (provenance (neo--merge-use-package-declarations 'vterm pairs))
          (report (neo--format-package-provenance provenance)))
     (should (string-match-p "neo:ai-buddy" report))

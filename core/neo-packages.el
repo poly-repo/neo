@@ -70,7 +70,8 @@ by `use-package' itself, with no merging involved here (see
 cross-extension case this path does not exercise)."
   (interactive)
   (let ((user (when slug (neo/extension-slug-publisher slug)))
-        (extension (when slug (neo/extension-slug-name slug))))
+        (extension (when slug (neo/extension-slug-name slug)))
+        replayed)
     (dolist (entry neo--enabled-packages)
       (let ((key (car entry))
             (forms (cdr entry)))
@@ -78,9 +79,15 @@ cross-extension case this path does not exercise)."
                   (and (equal user (car key))
                        (equal extension (cdr key))))
           (dolist (form forms)
+            (setq replayed t)
             (eval (neo--prepare-use-package-form
                    form
-                   neo--replayed-package-installs))))))))
+                   neo--replayed-package-installs))))))
+    ;; Hot-install and interactive reload callers require the extension to be
+    ;; usable when this function returns.  Queue its declarations together,
+    ;; then synchronize once instead of once per package.
+    (when replayed
+      (elpaca-wait))))
 
 ;; NOTE: `neo--collect-package-sources' lives in `neo-use-package.el', not
 ;; here, even though it groups entries from `neo--enabled-packages' (defined
