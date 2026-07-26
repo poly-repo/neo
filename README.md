@@ -12,6 +12,10 @@ isn't, you can download NEO.
 > have to take our word for it:
 >
 > - Clones (or pulls) this repository into `~/neo`.
+> - On a fresh clone, temporarily clones `poly-repo/neo-extensions` and
+>   `poly-repo/mav-extensions`, then installs their complete publisher trees at
+>   `~/neo/extensions/extensions/neo` and
+>   `~/neo/extensions/extensions/mav`.
 > - Creates a Python virtual environment at `~/neo/.neo-python` and installs
 >   `~/neo/requirements.txt` into it (this may `sudo apt install python3-venv`
 >   if that package isn't already present).

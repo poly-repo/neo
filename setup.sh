@@ -34,6 +34,26 @@ update_neo_checkout() {
     git -C "$target_dir" reset --hard "$upstream"
 }
 
+install_extension_sources() (
+    local target_dir="$1"
+    local neo_extensions_url="${2:-https://github.com/poly-repo/neo-extensions.git}"
+    local mav_extensions_url="${3:-https://github.com/poly-repo/mav-extensions.git}"
+    local temporary_dir
+    local extensions_dir="$target_dir/extensions/extensions"
+
+    temporary_dir="$(mktemp -d)"
+    trap 'rm -rf "$temporary_dir"' EXIT
+
+    git clone --depth 1 "$neo_extensions_url" \
+        "$temporary_dir/neo-extensions"
+    git clone --depth 1 "$mav_extensions_url" \
+        "$temporary_dir/mav-extensions"
+
+    mkdir -p "$extensions_dir"
+    mv "$temporary_dir/neo-extensions/extensions/neo" "$extensions_dir/"
+    mv "$temporary_dir/mav-extensions/extensions/mav" "$extensions_dir/"
+)
+
 # ==============================================================================
 #  NEO SETUP
 #  
@@ -53,6 +73,7 @@ REQ_FILE="$TARGET_DIR/requirements.txt"
 if [ ! -d "$TARGET_DIR" ]; then
     echo "Directory $TARGET_DIR does not exist. Cloning..."
     git clone "$REPO_URL" "$TARGET_DIR"
+    install_extension_sources "$TARGET_DIR"
 elif [ -d "$TARGET_DIR/.git" ]; then
     echo "Directory $TARGET_DIR exists and is a git repo. Pulling updates..."
     update_neo_checkout "$TARGET_DIR"
