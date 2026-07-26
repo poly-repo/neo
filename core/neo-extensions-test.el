@@ -548,5 +548,255 @@ suite's synthetic structs and the actual declaration."
                     (gethash "neo:haskell" neo--extensions))
                    '((haskell haskell-mode haskell-ts-mode))))))
 
+(defun neo-extensions-test--make-local-extension
+    (root publisher name &optional entry-file)
+  "Create a local extension directory under ROOT.
+When ENTRY-FILE is non-nil, also create its main extension file."
+  (let ((directory
+         (expand-file-name
+          (format "extensions/extensions/%s/%s" publisher name)
+          root)))
+    (make-directory directory t)
+    (when entry-file
+      (with-temp-file (expand-file-name (format "neo-%s.el" name) directory)
+        (insert ";;; -*- lexical-binding: t -*-\n")))
+    directory))
+
+(defun neo-extensions-test--framework-with-slugs (&rest slugs)
+  "Return a framework whose available extension table contains SLUGS."
+  (require 'neo-framework)
+  (let ((available (make-hash-table :test #'equal)))
+    (dolist (slug slugs)
+      (puthash slug t available))
+    (make-neo-framework :available-extensions available
+                        :installed-extensions
+                        (make-hash-table :test #'equal))))
+
+(ert-deftest neo/edit-extension-candidates-merge-framework-and-local-slugs ()
+  "Merge, sort, and deduplicate available and local extension slugs."
+  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+        (neo--framework
+         (neo-extensions-test--framework-with-slugs
+          "neo:remote" "neo:shared" "other:foreign" "neo:Invalid")))
+    (unwind-protect
+        (progn
+          (neo-extensions-test--make-local-extension
+           user-emacs-directory "mav" "personal")
+          (neo-extensions-test--make-local-extension
+           user-emacs-directory "neo" "shared")
+          (neo-extensions-test--make-local-extension
+           user-emacs-directory "neo" "Invalid")
+          (should
+           (equal (neo--editable-extension-slugs)
+                  '("mav:personal" "neo:remote" "neo:shared"))))
+      (delete-directory user-emacs-directory t))))
+
+(ert-deftest neo/edit-extension-visits-selected-local-entry-file ()
+  "Complete with require-match and visit the selected local entry file."
+  (let* ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+         (directory
+          (neo-extensions-test--make-local-extension
+           user-emacs-directory "neo" "sample" t))
+         (expected-file (expand-file-name "neo-sample.el" directory))
+         (neo--framework
+          (neo-extensions-test--framework-with-slugs
+           "mav:remote" "neo:sample"))
+         completion-collection
+         completion-require-match
+         visited-file)
+    (unwind-protect
+        (cl-letf (((symbol-function 'completing-read)
+                   (lambda (_prompt collection _predicate require-match
+                            &rest _args)
+                     (setq completion-collection collection
+                           completion-require-match require-match)
+                     "neo:sample"))
+                  ((symbol-function 'find-file)
+                   (lambda (file &rest _args)
+                     (setq visited-file file))))
+          (neo/edit-extension)
+          (should completion-require-match)
+          (should (equal completion-collection
+                         '("mav:remote" "neo:sample")))
+          (should (equal visited-file expected-file)))
+      (delete-directory user-emacs-directory t))))
+
+(ert-deftest neo/edit-extension-errors-before-prompt-without-local-extensions ()
+  "Refuse edit and create operations when no local extensions exist."
+  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+        (prompted nil))
+    (unwind-protect
+        (cl-letf (((symbol-function 'completing-read)
+                   (lambda (&rest _args)
+                     (setq prompted t)))
+                  ((symbol-function 'read-string)
+                   (lambda (&rest _args)
+                     (setq prompted t))))
+          (should-error (neo/edit-extension) :type 'user-error)
+          (should-error (neo/edit-extension '(4)) :type 'user-error)
+          (should-not prompted))
+      (delete-directory user-emacs-directory t))))
+
+(ert-deftest neo/edit-extension-errors-for-downloaded-only-extension ()
+  "Refuse to edit an available extension with no local source directory."
+  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+        (neo--framework
+         (neo-extensions-test--framework-with-slugs "neo:remote")))
+    (unwind-protect
+        (progn
+          (neo-extensions-test--make-local-extension
+           user-emacs-directory "neo" "local" t)
+          (cl-letf (((symbol-function 'completing-read)
+                     (lambda (&rest _args) "neo:remote")))
+            (should-error (neo/edit-extension) :type 'user-error)))
+      (delete-directory user-emacs-directory t))))
+
+(ert-deftest neo/edit-extension-errors-for-missing-local-entry-file ()
+  "Refuse to edit a local extension whose main entry file is absent."
+  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+        (neo--framework
+         (neo-extensions-test--framework-with-slugs)))
+    (unwind-protect
+        (progn
+          (neo-extensions-test--make-local-extension
+           user-emacs-directory "mav" "incomplete")
+          (cl-letf (((symbol-function 'completing-read)
+                     (lambda (&rest _args) "mav:incomplete")))
+            (should-error (neo/edit-extension) :type 'user-error)))
+      (delete-directory user-emacs-directory t))))
+
+(ert-deftest neo/edit-extension-prefix-creates-minimal-scaffold ()
+  "Read a raw slug, create a valid scaffold, and visit its entry file."
+  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+        (neo--framework
+         (neo-extensions-test--framework-with-slugs))
+        read-prompt
+        visited-file)
+    (unwind-protect
+        (progn
+          (neo-extensions-test--make-local-extension
+           user-emacs-directory "neo" "existing" t)
+          (cl-letf (((symbol-function 'read-string)
+                     (lambda (prompt &rest _args)
+                       (setq read-prompt prompt)
+                       "mav:my-tools"))
+                    ((symbol-function 'find-file)
+                     (lambda (file &rest _args)
+                       (setq visited-file file))))
+            (neo/edit-extension '(4)))
+          (let* ((directory
+                  (expand-file-name
+                   "extensions/extensions/mav/my-tools"
+                   user-emacs-directory))
+                 (manifest-file (expand-file-name "manifest.el" directory))
+                 (entry-file (expand-file-name "neo-my-tools.el" directory))
+                 manifest-content
+                 entry-content)
+            (with-temp-buffer
+              (insert-file-contents manifest-file)
+              (setq manifest-content (buffer-string)))
+            (with-temp-buffer
+              (insert-file-contents entry-file)
+              (setq entry-content (buffer-string)))
+            (should (equal read-prompt
+                           "New extension (publisher:name): "))
+            (should (equal visited-file entry-file))
+            (should (string-match-p ":name \"my-tools\"" manifest-content))
+            (should (string-match-p ":title \"My Tools\"" manifest-content))
+            (should (string-match-p ":publisher \"mav\"" manifest-content))
+            (should
+             (string-match-p
+              ":url \"https://github.com/poly-repo/mav-extensions.git\""
+              manifest-content))
+            (should
+             (string-match-p
+              ":path \"extensions/mav/my-tools\""
+              manifest-content))
+            (should (string-match-p ":description \"\"" manifest-content))
+            (should (string-match-p ":keywords ()" manifest-content))
+            (should (string-match-p ":requires ()" manifest-content))
+            (should
+             (string-prefix-p ";;; -*- lexical-binding: t -*-"
+                              entry-content))
+            (should-not (string-match-p "^ *(provide " entry-content))))
+      (delete-directory user-emacs-directory t))))
+
+(ert-deftest neo/edit-extension-rejects-invalid-new-slugs ()
+  "Reject unsupported publishers and malformed extension names."
+  (dolist (slug '("other:sample"
+                  "neo:Upper"
+                  "neo:two_words"
+                  "neo:-leading"
+                  "neo:trailing-"
+                  "neo:two:parts"
+                  "neo:"))
+    (should-error (neo--parse-editable-extension-slug slug)
+                  :type 'user-error)))
+
+(ert-deftest neo/edit-extension-rejects-exact-existing-slug ()
+  "Reject exact conflicts from either available or local extensions."
+  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+        (neo--framework
+         (neo-extensions-test--framework-with-slugs "mav:remote")))
+    (unwind-protect
+        (progn
+          (neo-extensions-test--make-local-extension
+           user-emacs-directory "neo" "existing" t)
+          (dolist (slug '("neo:existing" "mav:remote"))
+            (cl-letf (((symbol-function 'read-string)
+                       (lambda (&rest _args) slug)))
+              (should-error (neo/edit-extension '(4))
+                            :type 'user-error))))
+      (delete-directory user-emacs-directory t))))
+
+(ert-deftest neo/edit-extension-allows-same-name-under-another-publisher ()
+  "Treat publisher:name as identity when checking name conflicts."
+  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+        (neo--framework
+         (neo-extensions-test--framework-with-slugs))
+        visited-file)
+    (unwind-protect
+        (progn
+          (neo-extensions-test--make-local-extension
+           user-emacs-directory "neo" "shared" t)
+          (cl-letf (((symbol-function 'read-string)
+                     (lambda (&rest _args) "mav:shared"))
+                    ((symbol-function 'find-file)
+                     (lambda (file &rest _args)
+                       (setq visited-file file))))
+            (neo/edit-extension '(4)))
+          (should
+           (equal visited-file
+                  (expand-file-name
+                   "extensions/extensions/mav/shared/neo-shared.el"
+                   user-emacs-directory))))
+      (delete-directory user-emacs-directory t))))
+
+(ert-deftest neo/edit-extension-cleans-up-after-scaffold-write-failure ()
+  "Leave no target or staging directory when scaffold creation fails."
+  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+        (neo--framework
+         (neo-extensions-test--framework-with-slugs)))
+    (unwind-protect
+        (progn
+          (neo-extensions-test--make-local-extension
+           user-emacs-directory "neo" "existing" t)
+          (cl-letf (((symbol-function 'read-string)
+                     (lambda (&rest _args) "neo:broken"))
+                    ((symbol-function 'neo--write-extension-scaffold)
+                     (lambda (&rest _args)
+                       (error "synthetic write failure"))))
+            (should-error (neo/edit-extension '(4)) :type 'error))
+          (let ((publisher-directory
+                 (expand-file-name "extensions/extensions/neo"
+                                   user-emacs-directory)))
+            (should-not
+             (file-exists-p
+              (expand-file-name "broken" publisher-directory)))
+            (should-not
+             (directory-files publisher-directory nil
+                              "\\`\\.broken-"))))
+      (delete-directory user-emacs-directory t))))
+
 (provide 'neo-extensions-test)
 ;;; neo-extensions-test.el ends here

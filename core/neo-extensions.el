@@ -9,6 +9,10 @@
 
 (require 'neo-extensions-digest)
 
+(declare-function neo--framework-instance "neo-framework")
+(declare-function neo-framework-available-extensions "neo-framework"
+                  (framework))
+
 (defgroup neo-extensions nil
   "Settings for Neo Extensions system."
   :group 'neo
@@ -1077,6 +1081,202 @@ When REFRESH is non-nil, discard cached metadata and query GitHub again."
  "mav" 
  "https://github.com/poly-repo/mav-extensions.git"
  (neo--local-registry-override "mav"))
+
+(defconst neo--editable-extension-publishers '("mav" "neo")
+  "Publishers supported by `neo/edit-extension'.")
+
+(defconst neo--editable-extension-slug-regexp
+  "\\`\\(mav\\|neo\\):\\([a-z][a-z0-9]*\\(?:-[a-z0-9]+\\)*\\)\\'"
+  "Regular expression matching slugs supported by `neo/edit-extension'.")
+
+(defun neo--editable-extension-slug-p (slug)
+  "Return non-nil when SLUG identifies a supported editable extension."
+  (let ((case-fold-search nil))
+    (and (stringp slug)
+         (string-match-p neo--editable-extension-slug-regexp slug))))
+
+(defun neo--local-extensions-root ()
+  "Return the root containing locally editable extensions."
+  (expand-file-name "extensions/extensions" user-emacs-directory))
+
+(defun neo--local-extension-directory (publisher name)
+  "Return the local extension directory for PUBLISHER and NAME."
+  (expand-file-name
+   name
+   (expand-file-name publisher (neo--local-extensions-root))))
+
+(defun neo--local-extension-slugs ()
+  "Return sorted slugs for locally editable `mav' and `neo' extensions."
+  (let (slugs)
+    (dolist (publisher neo--editable-extension-publishers)
+      (let ((publisher-directory
+             (expand-file-name publisher (neo--local-extensions-root))))
+        (when (file-directory-p publisher-directory)
+          (dolist (entry (directory-files publisher-directory nil "^[^.]"))
+            (when (file-directory-p
+                   (expand-file-name entry publisher-directory))
+              (let ((slug (format "%s:%s" publisher entry)))
+                (when (neo--editable-extension-slug-p slug)
+                  (push slug slugs))))))))
+    (sort slugs #'string<)))
+
+(defun neo--available-extension-slugs ()
+  "Return sorted extension slugs from the active framework."
+  (require 'neo-framework)
+  (let ((available
+         (neo-framework-available-extensions (neo--framework-instance)))
+        slugs)
+    (maphash (lambda (slug _extension)
+               (when (neo--editable-extension-slug-p slug)
+                 (push slug slugs)))
+             available)
+    (sort slugs #'string<)))
+
+(defun neo--editable-extension-slugs ()
+  "Return the sorted union of available and locally editable extensions."
+  (let ((seen (make-hash-table :test #'equal))
+        slugs)
+    (dolist (slug (append (neo--available-extension-slugs)
+                          (neo--local-extension-slugs)))
+      (unless (gethash slug seen)
+        (puthash slug t seen)
+        (push slug slugs)))
+    (sort slugs #'string<)))
+
+(defun neo--parse-editable-extension-slug (slug)
+  "Return (PUBLISHER NAME) parsed from SLUG, or signal a user error."
+  (unless (neo--editable-extension-slug-p slug)
+    (user-error
+     "Extension must be neo:NAME or mav:NAME with a lowercase kebab-case name"))
+  (let ((case-fold-search nil))
+    (string-match neo--editable-extension-slug-regexp slug))
+  (list (match-string 1 slug) (match-string 2 slug)))
+
+(defun neo--extension-title-from-name (name)
+  "Return a human-readable extension title derived from NAME."
+  (string-join (mapcar #'capitalize (split-string name "-")) " "))
+
+(defun neo--extension-repository-url (publisher)
+  "Return the registered repository URL for PUBLISHER."
+  (if-let* ((registry
+             (alist-get publisher neo/extension-registry-alist
+                        nil nil #'string=)))
+      (neo--extension-registry-url registry)
+    (user-error "No extension registry is registered for %s" publisher)))
+
+(defun neo--write-extension-scaffold (directory publisher name)
+  "Write a minimal extension scaffold in DIRECTORY for PUBLISHER and NAME."
+  (let ((title (neo--extension-title-from-name name))
+        (repository-url (neo--extension-repository-url publisher)))
+    (with-temp-file (expand-file-name "manifest.el" directory)
+      (insert
+       (format
+        (concat
+         "(neo/extension\n"
+         " :name %S\n"
+         " :title %S\n"
+         " :publisher %S\n"
+         " :description \"\"\n"
+         " :categories (neo)\n"
+         " :keywords ()\n"
+         " :requires ()\n"
+         " :repository (\n"
+         "              :type \"git\"\n"
+         "              :url %S\n"
+         "              :path %S))\n")
+        name
+        title
+        publisher
+        repository-url
+        (format "extensions/%s/%s" publisher name))))
+    (with-temp-file (expand-file-name (format "neo-%s.el" name) directory)
+      (insert
+       (format
+        (concat
+         ";;; -*- lexical-binding: t -*-\n\n"
+         ";;; This is %s, a NEO extension\n"
+         ";;;\n"
+         ";;; %s\n\n"
+         ";;; Note, no (provide 'neo-%s) here, extensions are loaded not required.\n")
+        name title name)))))
+
+(defun neo--create-local-extension (publisher name)
+  "Create and return a local extension directory for PUBLISHER and NAME."
+  (let* ((target-directory
+          (neo--local-extension-directory publisher name))
+         (publisher-directory (file-name-directory
+                               (directory-file-name target-directory)))
+         temporary-directory)
+    (when (or (file-exists-p target-directory)
+              (file-symlink-p target-directory))
+      (user-error "Local extension already exists: %s:%s" publisher name))
+    (make-directory publisher-directory t)
+    (setq temporary-directory
+          (make-temp-file
+           (expand-file-name (format ".%s-" name) publisher-directory)
+           t))
+    (unwind-protect
+        (progn
+          (neo--write-extension-scaffold temporary-directory publisher name)
+          (rename-file temporary-directory target-directory)
+          (setq temporary-directory nil)
+          target-directory)
+      (when (and temporary-directory
+                 (file-directory-p temporary-directory))
+        (delete-directory temporary-directory t)))))
+
+(defun neo--edit-existing-extension ()
+  "Prompt for and visit an existing local extension."
+  (unless (neo--local-extension-slugs)
+    (user-error "No local extensions exist under the init directory"))
+  (let* ((slug (completing-read "Edit extension: "
+                                (neo--editable-extension-slugs)
+                                nil t))
+         (parts (neo--parse-editable-extension-slug slug))
+         (publisher (car parts))
+         (name (cadr parts))
+         (directory (neo--local-extension-directory publisher name))
+         (entry-file (expand-file-name (format "neo-%s.el" name) directory)))
+    (unless (file-directory-p directory)
+      (user-error
+       "Extension %s is available but not editable under the init directory"
+       slug))
+    (unless (file-regular-p entry-file)
+      (user-error "Local extension %s has no entry file %s"
+                  slug
+                  (file-name-nondirectory entry-file)))
+    (find-file entry-file)))
+
+(defun neo--edit-new-extension ()
+  "Prompt for, create, and visit a new local extension."
+  (unless (neo--local-extension-slugs)
+    (user-error "No local extensions exist under the init directory"))
+  (let* ((slug (read-string "New extension (publisher:name): "))
+         (parts (neo--parse-editable-extension-slug slug))
+         (publisher (car parts))
+         (name (cadr parts))
+         (target-directory
+          (neo--local-extension-directory publisher name)))
+    (when (or (member slug (neo--editable-extension-slugs))
+              (file-exists-p target-directory)
+              (file-symlink-p target-directory))
+      (user-error "Extension already exists: %s" slug))
+    (neo--create-local-extension publisher name)
+    (find-file (expand-file-name (format "neo-%s.el" name)
+                                 target-directory))))
+
+;;;###autoload
+(defun neo/edit-extension (&optional create)
+  "Edit a local extension, or create one when CREATE is non-nil.
+
+Without a prefix argument, complete over all available extensions and
+visit the selected extension under `user-emacs-directory'.  With a
+prefix argument, read a new publisher:name slug without completion,
+create a minimal local scaffold, and visit its entry file."
+  (interactive "P")
+  (if create
+      (neo--edit-new-extension)
+    (neo--edit-existing-extension)))
 
 (defun neo--populate-extensions-from-file (file extensions-table)
   "Load FILE and populate EXTENSIONS-TABLE. Return t if successful."
