@@ -12,6 +12,7 @@
 (declare-function neo--framework-instance "neo-framework")
 (declare-function neo-framework-available-extensions "neo-framework"
                   (framework))
+(declare-function projectile-project-root "projectile")
 
 (defgroup neo-extensions nil
   "Settings for Neo Extensions system."
@@ -1096,8 +1097,15 @@ When REFRESH is non-nil, discard cached metadata and query GitHub again."
          (string-match-p neo--editable-extension-slug-regexp slug))))
 
 (defun neo--local-extensions-root ()
-  "Return the root containing locally editable extensions."
-  (expand-file-name "extensions/extensions" user-emacs-directory))
+  "Return the current project's root containing editable extensions."
+  (if-let* ((project-root
+             (and (fboundp 'projectile-project-root)
+                  (ignore-errors (projectile-project-root)))))
+      (expand-file-name
+       "devex/editors/emacs/extensions/extensions"
+       project-root)
+    (user-error
+     "No current Projectile project; cannot locate editable extensions")))
 
 (defun neo--local-extension-directory (publisher name)
   "Return the local extension directory for PUBLISHER and NAME."
@@ -1228,7 +1236,7 @@ When REFRESH is non-nil, discard cached metadata and query GitHub again."
 (defun neo--edit-existing-extension ()
   "Prompt for and visit an existing local extension."
   (unless (neo--local-extension-slugs)
-    (user-error "No local extensions exist under the init directory"))
+    (user-error "No local extensions exist under the current project"))
   (let* ((slug (completing-read "Edit extension: "
                                 (neo--editable-extension-slugs)
                                 nil t))
@@ -1239,7 +1247,7 @@ When REFRESH is non-nil, discard cached metadata and query GitHub again."
          (entry-file (expand-file-name (format "neo-%s.el" name) directory)))
     (unless (file-directory-p directory)
       (user-error
-       "Extension %s is available but not editable under the init directory"
+       "Extension %s is available but not editable under the current project"
        slug))
     (unless (file-regular-p entry-file)
       (user-error "Local extension %s has no entry file %s"
@@ -1250,7 +1258,7 @@ When REFRESH is non-nil, discard cached metadata and query GitHub again."
 (defun neo--edit-new-extension ()
   "Prompt for, create, and visit a new local extension."
   (unless (neo--local-extension-slugs)
-    (user-error "No local extensions exist under the init directory"))
+    (user-error "No local extensions exist under the current project"))
   (let* ((slug (read-string "New extension (publisher:name): "))
          (parts (neo--parse-editable-extension-slug slug))
          (publisher (car parts))
@@ -1270,9 +1278,10 @@ When REFRESH is non-nil, discard cached metadata and query GitHub again."
   "Edit a local extension, or create one when CREATE is non-nil.
 
 Without a prefix argument, complete over all available extensions and
-visit the selected extension under `user-emacs-directory'.  With a
-prefix argument, read a new publisher:name slug without completion,
-create a minimal local scaffold, and visit its entry file."
+visit the selected extension under the current project's
+devex/editors/emacs extension tree.  With a prefix argument, read a new
+publisher:name slug without completion, create a minimal local
+scaffold, and visit its entry file."
   (interactive "P")
   (if create
       (neo--edit-new-extension)

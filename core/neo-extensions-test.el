@@ -554,13 +554,23 @@ suite's synthetic structs and the actual declaration."
 When ENTRY-FILE is non-nil, also create its main extension file."
   (let ((directory
          (expand-file-name
-          (format "extensions/extensions/%s/%s" publisher name)
+          (format
+           "devex/editors/emacs/extensions/extensions/%s/%s"
+           publisher
+           name)
           root)))
     (make-directory directory t)
     (when entry-file
       (with-temp-file (expand-file-name (format "neo-%s.el" name) directory)
         (insert ";;; -*- lexical-binding: t -*-\n")))
     directory))
+
+(defmacro neo-extensions-test--with-current-project (root &rest body)
+  "Run BODY with Projectile resolving the current project to ROOT."
+  (declare (indent 1) (debug t))
+  `(cl-letf (((symbol-function 'projectile-project-root)
+              (lambda () ,root)))
+     ,@body))
 
 (defun neo-extensions-test--framework-with-slugs (&rest slugs)
   "Return a framework whose available extension table contains SLUGS."
@@ -574,29 +584,32 @@ When ENTRY-FILE is non-nil, also create its main extension file."
 
 (ert-deftest neo/edit-extension-candidates-merge-framework-and-local-slugs ()
   "Merge, sort, and deduplicate available and local extension slugs."
-  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+  (let ((project-root-directory (make-temp-file "neo-edit-project-" t))
+        (user-emacs-directory (make-temp-file "neo-edit-init-" t))
         (neo--framework
          (neo-extensions-test--framework-with-slugs
           "neo:remote" "neo:shared" "other:foreign" "neo:Invalid")))
     (unwind-protect
-        (progn
+        (neo-extensions-test--with-current-project project-root-directory
           (neo-extensions-test--make-local-extension
-           user-emacs-directory "mav" "personal")
+           project-root-directory "mav" "personal")
           (neo-extensions-test--make-local-extension
-           user-emacs-directory "neo" "shared")
+           project-root-directory "neo" "shared")
           (neo-extensions-test--make-local-extension
-           user-emacs-directory "neo" "Invalid")
+           project-root-directory "neo" "Invalid")
           (should
            (equal (neo--editable-extension-slugs)
                   '("mav:personal" "neo:remote" "neo:shared"))))
+      (delete-directory project-root-directory t)
       (delete-directory user-emacs-directory t))))
 
 (ert-deftest neo/edit-extension-visits-selected-local-entry-file ()
-  "Complete with require-match and visit the selected local entry file."
-  (let* ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+  "Visit project-local source independently of `user-emacs-directory'."
+  (let* ((project-root-directory (make-temp-file "neo-edit-project-" t))
+         (user-emacs-directory (make-temp-file "neo-edit-init-" t))
          (directory
           (neo-extensions-test--make-local-extension
-           user-emacs-directory "neo" "sample" t))
+           project-root-directory "neo" "sample" t))
          (expected-file (expand-file-name "neo-sample.el" directory))
          (neo--framework
           (neo-extensions-test--framework-with-slugs
@@ -605,77 +618,100 @@ When ENTRY-FILE is non-nil, also create its main extension file."
          completion-require-match
          visited-file)
     (unwind-protect
-        (cl-letf (((symbol-function 'completing-read)
-                   (lambda (_prompt collection _predicate require-match
-                            &rest _args)
-                     (setq completion-collection collection
-                           completion-require-match require-match)
-                     "neo:sample"))
-                  ((symbol-function 'find-file)
-                   (lambda (file &rest _args)
-                     (setq visited-file file))))
-          (neo/edit-extension)
-          (should completion-require-match)
-          (should (equal completion-collection
-                         '("mav:remote" "neo:sample")))
-          (should (equal visited-file expected-file)))
+        (neo-extensions-test--with-current-project project-root-directory
+          (cl-letf (((symbol-function 'completing-read)
+                     (lambda (_prompt collection _predicate require-match
+                              &rest _args)
+                       (setq completion-collection collection
+                             completion-require-match require-match)
+                       "neo:sample"))
+                    ((symbol-function 'find-file)
+                     (lambda (file &rest _args)
+                       (setq visited-file file))))
+            (neo/edit-extension)
+            (should completion-require-match)
+            (should (equal completion-collection
+                           '("mav:remote" "neo:sample")))
+            (should (equal visited-file expected-file))))
+      (delete-directory project-root-directory t)
       (delete-directory user-emacs-directory t))))
 
 (ert-deftest neo/edit-extension-errors-before-prompt-without-local-extensions ()
   "Refuse edit and create operations when no local extensions exist."
-  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+  (let ((project-root-directory (make-temp-file "neo-edit-project-" t))
+        (user-emacs-directory (make-temp-file "neo-edit-init-" t))
         (prompted nil))
     (unwind-protect
-        (cl-letf (((symbol-function 'completing-read)
-                   (lambda (&rest _args)
-                     (setq prompted t)))
-                  ((symbol-function 'read-string)
-                   (lambda (&rest _args)
-                     (setq prompted t))))
-          (should-error (neo/edit-extension) :type 'user-error)
-          (should-error (neo/edit-extension '(4)) :type 'user-error)
-          (should-not prompted))
+        (neo-extensions-test--with-current-project project-root-directory
+          (cl-letf (((symbol-function 'completing-read)
+                     (lambda (&rest _args)
+                       (setq prompted t)))
+                    ((symbol-function 'read-string)
+                     (lambda (&rest _args)
+                       (setq prompted t))))
+            (should-error (neo/edit-extension) :type 'user-error)
+            (should-error (neo/edit-extension '(4)) :type 'user-error)
+            (should-not prompted)))
+      (delete-directory project-root-directory t)
+      (delete-directory user-emacs-directory t))))
+
+(ert-deftest neo/edit-extension-errors-clearly-without-current-project ()
+  "Explain that editing needs a current project before inspecting sources."
+  (let ((user-emacs-directory (make-temp-file "neo-edit-init-" t)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'projectile-project-root)
+                   (lambda () nil)))
+          (let ((error
+                 (should-error (neo/edit-extension) :type 'user-error)))
+            (should
+             (string-match-p "No current Projectile project"
+                             (error-message-string error)))))
       (delete-directory user-emacs-directory t))))
 
 (ert-deftest neo/edit-extension-errors-for-downloaded-only-extension ()
   "Refuse to edit an available extension with no local source directory."
-  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+  (let ((project-root-directory (make-temp-file "neo-edit-project-" t))
+        (user-emacs-directory (make-temp-file "neo-edit-init-" t))
         (neo--framework
          (neo-extensions-test--framework-with-slugs "neo:remote")))
     (unwind-protect
-        (progn
+        (neo-extensions-test--with-current-project project-root-directory
           (neo-extensions-test--make-local-extension
-           user-emacs-directory "neo" "local" t)
+           project-root-directory "neo" "local" t)
           (cl-letf (((symbol-function 'completing-read)
                      (lambda (&rest _args) "neo:remote")))
             (should-error (neo/edit-extension) :type 'user-error)))
+      (delete-directory project-root-directory t)
       (delete-directory user-emacs-directory t))))
 
 (ert-deftest neo/edit-extension-errors-for-missing-local-entry-file ()
   "Refuse to edit a local extension whose main entry file is absent."
-  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+  (let ((project-root-directory (make-temp-file "neo-edit-project-" t))
+        (user-emacs-directory (make-temp-file "neo-edit-init-" t))
         (neo--framework
          (neo-extensions-test--framework-with-slugs)))
     (unwind-protect
-        (progn
+        (neo-extensions-test--with-current-project project-root-directory
           (neo-extensions-test--make-local-extension
-           user-emacs-directory "mav" "incomplete")
+           project-root-directory "mav" "incomplete")
           (cl-letf (((symbol-function 'completing-read)
                      (lambda (&rest _args) "mav:incomplete")))
             (should-error (neo/edit-extension) :type 'user-error)))
+      (delete-directory project-root-directory t)
       (delete-directory user-emacs-directory t))))
 
 (ert-deftest neo/edit-extension-prefix-creates-minimal-scaffold ()
-  "Read a raw slug, create a valid scaffold, and visit its entry file."
-  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+  "Create a project-local scaffold independently of the init directory."
+  (let ((project-root-directory (make-temp-file "neo-edit-project-" t))
+        (user-emacs-directory (make-temp-file "neo-edit-init-" t))
         (neo--framework
          (neo-extensions-test--framework-with-slugs))
         read-prompt
         visited-file)
     (unwind-protect
-        (progn
+        (neo-extensions-test--with-current-project project-root-directory
           (neo-extensions-test--make-local-extension
-           user-emacs-directory "neo" "existing" t)
+           project-root-directory "neo" "existing" t)
           (cl-letf (((symbol-function 'read-string)
                      (lambda (prompt &rest _args)
                        (setq read-prompt prompt)
@@ -686,8 +722,8 @@ When ENTRY-FILE is non-nil, also create its main extension file."
             (neo/edit-extension '(4)))
           (let* ((directory
                   (expand-file-name
-                   "extensions/extensions/mav/my-tools"
-                   user-emacs-directory))
+                   "devex/editors/emacs/extensions/extensions/mav/my-tools"
+                   project-root-directory))
                  (manifest-file (expand-file-name "manifest.el" directory))
                  (entry-file (expand-file-name "neo-my-tools.el" directory))
                  manifest-content
@@ -719,6 +755,7 @@ When ENTRY-FILE is non-nil, also create its main extension file."
              (string-prefix-p ";;; -*- lexical-binding: t -*-"
                               entry-content))
             (should-not (string-match-p "^ *(provide " entry-content))))
+      (delete-directory project-root-directory t)
       (delete-directory user-emacs-directory t))))
 
 (ert-deftest neo/edit-extension-rejects-invalid-new-slugs ()
@@ -735,30 +772,33 @@ When ENTRY-FILE is non-nil, also create its main extension file."
 
 (ert-deftest neo/edit-extension-rejects-exact-existing-slug ()
   "Reject exact conflicts from either available or local extensions."
-  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+  (let ((project-root-directory (make-temp-file "neo-edit-project-" t))
+        (user-emacs-directory (make-temp-file "neo-edit-init-" t))
         (neo--framework
          (neo-extensions-test--framework-with-slugs "mav:remote")))
     (unwind-protect
-        (progn
+        (neo-extensions-test--with-current-project project-root-directory
           (neo-extensions-test--make-local-extension
-           user-emacs-directory "neo" "existing" t)
+           project-root-directory "neo" "existing" t)
           (dolist (slug '("neo:existing" "mav:remote"))
             (cl-letf (((symbol-function 'read-string)
                        (lambda (&rest _args) slug)))
               (should-error (neo/edit-extension '(4))
                             :type 'user-error))))
+      (delete-directory project-root-directory t)
       (delete-directory user-emacs-directory t))))
 
 (ert-deftest neo/edit-extension-allows-same-name-under-another-publisher ()
   "Treat publisher:name as identity when checking name conflicts."
-  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+  (let ((project-root-directory (make-temp-file "neo-edit-project-" t))
+        (user-emacs-directory (make-temp-file "neo-edit-init-" t))
         (neo--framework
          (neo-extensions-test--framework-with-slugs))
         visited-file)
     (unwind-protect
-        (progn
+        (neo-extensions-test--with-current-project project-root-directory
           (neo-extensions-test--make-local-extension
-           user-emacs-directory "neo" "shared" t)
+           project-root-directory "neo" "shared" t)
           (cl-letf (((symbol-function 'read-string)
                      (lambda (&rest _args) "mav:shared"))
                     ((symbol-function 'find-file)
@@ -768,19 +808,23 @@ When ENTRY-FILE is non-nil, also create its main extension file."
           (should
            (equal visited-file
                   (expand-file-name
-                   "extensions/extensions/mav/shared/neo-shared.el"
-                   user-emacs-directory))))
+                   (concat
+                    "devex/editors/emacs/extensions/extensions/"
+                    "mav/shared/neo-shared.el")
+                   project-root-directory))))
+      (delete-directory project-root-directory t)
       (delete-directory user-emacs-directory t))))
 
 (ert-deftest neo/edit-extension-cleans-up-after-scaffold-write-failure ()
   "Leave no target or staging directory when scaffold creation fails."
-  (let ((user-emacs-directory (make-temp-file "neo-edit-extension-" t))
+  (let ((project-root-directory (make-temp-file "neo-edit-project-" t))
+        (user-emacs-directory (make-temp-file "neo-edit-init-" t))
         (neo--framework
          (neo-extensions-test--framework-with-slugs)))
     (unwind-protect
-        (progn
+        (neo-extensions-test--with-current-project project-root-directory
           (neo-extensions-test--make-local-extension
-           user-emacs-directory "neo" "existing" t)
+           project-root-directory "neo" "existing" t)
           (cl-letf (((symbol-function 'read-string)
                      (lambda (&rest _args) "neo:broken"))
                     ((symbol-function 'neo--write-extension-scaffold)
@@ -788,14 +832,16 @@ When ENTRY-FILE is non-nil, also create its main extension file."
                        (error "synthetic write failure"))))
             (should-error (neo/edit-extension '(4)) :type 'error))
           (let ((publisher-directory
-                 (expand-file-name "extensions/extensions/neo"
-                                   user-emacs-directory)))
+                 (expand-file-name
+                  "devex/editors/emacs/extensions/extensions/neo"
+                  project-root-directory)))
             (should-not
              (file-exists-p
               (expand-file-name "broken" publisher-directory)))
             (should-not
              (directory-files publisher-directory nil
                               "\\`\\.broken-"))))
+      (delete-directory project-root-directory t)
       (delete-directory user-emacs-directory t))))
 
 (provide 'neo-extensions-test)
