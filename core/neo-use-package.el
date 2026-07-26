@@ -1,6 +1,7 @@
 ;;; -*- lexical-binding: t -*-
 (require 'cl-lib)
 (require 'neo-list-utils)
+(require 'package)
 
 (cl-defstruct (neo-merge-conflict (:constructor make-neo-merge-conflict))
   "A single dropped value from merging duplicate `neo/use-package' declarations.
@@ -31,6 +32,34 @@ Shared with the merge logic in `neo--merge-use-package-declarations' so
 it can recognize a framework-injected default vs. a real user-supplied
 recipe.  The framework drains all queued declarations once after replay,
 instead of blocking Elpaca separately for each package.")
+
+(defun neo/builtin-feature-p (name)
+  "Return non-nil when NAME denotes a feature shipped with Emacs.
+
+NAME may be a symbol or string.  This recognizes the special
+`use-package' pseudo-feature `emacs', libraries recorded in Emacs's
+built-in package metadata, and built-in libraries whose files reside in
+Emacs's own Lisp directory.
+
+This answers whether NAME is supplied by the running Emacs installation,
+not merely whether it is already installed or available on `load-path'."
+  (let* ((symbol
+          (cond
+           ((symbolp name) name)
+           ((stringp name) (intern name))
+           (t
+            (signal 'wrong-type-argument
+                    (list '(or symbol string) name)))))
+         (library-name (symbol-name symbol)))
+    (or (eq symbol 'emacs)
+        (package-built-in-p symbol)
+        (when-let* ((library (locate-library library-name))
+                    (library (file-truename library))
+                    (lisp-root
+                     (and (boundp 'lisp-directory)
+                          lisp-directory
+                          (file-truename lisp-directory))))
+          (file-in-directory-p library lisp-root)))))
 
 (defconst neo--use-package-list-sections
   '(:config :init :hook :bind :bind* :custom-face :mode :interpreter
@@ -571,7 +600,7 @@ path."
   (let* ((args (neo--normalize-use-package-arguments args))
          (args (if (memq :ensure args)
                    args
-                 (append args (if (string= name "emacs")
+                 (append args (if (neo/builtin-feature-p name)
                                   '(:ensure nil)
                                 (list :ensure neo--use-package-default-ensure)))))
          (file (or load-file-name buffer-file-name "unknown"))

@@ -1,5 +1,6 @@
 ;;; neo-use-package-test.el --- Tests for neo/use-package -*- lexical-binding: t -*-
 
+(require 'cl-lib)
 (require 'ert)
 
 (unless (featurep 'dash)
@@ -33,6 +34,56 @@
 
 (defvar neo/use-extensions t)
 
+(ert-deftest neo/builtin-feature-p-recognizes-emacs ()
+  "Recognize the `use-package' Emacs pseudo-feature by symbol or string."
+  (should (neo/builtin-feature-p 'emacs))
+  (should (neo/builtin-feature-p "emacs")))
+
+(ert-deftest neo/builtin-feature-p-prefers-package-metadata ()
+  "Recognize bundled packages even when an external library shadows them."
+  (cl-letf (((symbol-function #'package-built-in-p)
+             (lambda (_name) t))
+            ((symbol-function #'locate-library)
+             (lambda (_name) "/tmp/external/org.el")))
+    (should (neo/builtin-feature-p 'org))))
+
+(ert-deftest neo/builtin-feature-p-recognizes-library-in-emacs-lisp-tree ()
+  "Recognize non-package libraries residing in Emacs's Lisp directory."
+  (let* ((lisp-root (make-temp-file "neo-emacs-lisp-" t))
+         (library (make-temp-file
+                   (expand-file-name "neo-builtin-" lisp-root)
+                   nil ".el"))
+         (lisp-directory lisp-root))
+    (unwind-protect
+        (cl-letf (((symbol-function #'package-built-in-p)
+                   (lambda (_name) nil))
+                  ((symbol-function #'locate-library)
+                   (lambda (_name) library)))
+          (should (neo/builtin-feature-p 'neo-test-builtin)))
+      (delete-directory lisp-root t))))
+
+(ert-deftest neo/builtin-feature-p-rejects-external-library ()
+  "Do not classify a library outside Emacs's Lisp directory as built-in."
+  (let* ((lisp-root (make-temp-file "neo-emacs-lisp-" t))
+         (external-root (make-temp-file "neo-external-lisp-" t))
+         (library (make-temp-file
+                   (expand-file-name "neo-external-" external-root)
+                   nil ".el"))
+         (lisp-directory lisp-root))
+    (unwind-protect
+        (cl-letf (((symbol-function #'package-built-in-p)
+                   (lambda (_name) nil))
+                  ((symbol-function #'locate-library)
+                   (lambda (_name) library)))
+          (should-not (neo/builtin-feature-p 'neo-test-external)))
+      (delete-directory external-root t)
+      (delete-directory lisp-root t))))
+
+(ert-deftest neo/builtin-feature-p-rejects-invalid-name ()
+  "Signal a type error when NAME is neither a symbol nor a string."
+  (should-error (neo/builtin-feature-p 42)
+                :type 'wrong-type-argument))
+
 (ert-deftest neo/use-package-adds-ensure-by-default ()
   "Default Neo package declarations to an asynchronous Elpaca ensure."
   (let ((load-file-name neo-use-package-test--file))
@@ -56,6 +107,38 @@
     (let ((expansion (prin1-to-string
                       (macroexpand-1 '(neo/use-package emacs :config (ignore))))))
       (should (string-match-p ":ensure nil" expansion)))))
+
+(ert-deftest neo/use-package-keeps-built-in-package-unensured ()
+  "Keep packages bundled with a fresh Emacs installation out of Elpaca."
+  (let ((load-file-name neo-use-package-test--file))
+    (cl-letf (((symbol-function #'package-built-in-p)
+               (lambda (_name) t)))
+      (let ((expansion
+             (prin1-to-string
+              (macroexpand-1 '(neo/use-package bundled-package)))))
+        (should (string-match-p ":ensure nil" expansion))
+        (should-not (string-match-p ":ensure t" expansion))))))
+
+(ert-deftest neo/use-package-preserves-explicit-ensure ()
+  "Preserve an explicit `:ensure' recipe without applying the default."
+  (let ((load-file-name neo-use-package-test--file))
+    (let ((expansion
+           (prin1-to-string
+            (macroexpand-1
+             '(neo/use-package sample-package
+                :ensure (:host github :repo "owner/sample-package"))))))
+      (should (string-match-p
+               ":ensure (:host github :repo \"owner/sample-package\")"
+               expansion)))))
+
+(ert-deftest neo/use-package-normalizes-builtin-to-ensure-nil ()
+  "Preserve `:builtin' semantics by normalizing it to `:ensure nil'."
+  (let ((load-file-name neo-use-package-test--file))
+    (let ((expansion
+           (prin1-to-string
+            (macroexpand-1 '(neo/use-package sample-package :builtin)))))
+      (should (string-match-p ":ensure nil" expansion))
+      (should-not (string-match-p ":builtin" expansion)))))
 
 (ert-deftest neo/prepare-use-package-form-disables-duplicate-installs ()
   "Avoid re-queueing duplicate package installs during replay."
