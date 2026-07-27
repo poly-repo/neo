@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source <(
     sed -n \
+        -e '/^ensure_user_local_bin_on_path()/,/^}/p' \
         -e '/^update_neo_checkout()/,/^}/p' \
         -e '/^install_extension_sources()/,/^)/p' \
         "$SCRIPT_DIR/setup.sh"
@@ -13,6 +14,25 @@ source <(
 
 TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEST_ROOT"' EXIT
+
+(
+    HOME="$TEST_ROOT/path-home"
+    PATH="/usr/bin:/bin"
+
+    ensure_user_local_bin_on_path
+    test "$PATH" = "$HOME/.local/bin:/usr/bin:/bin"
+
+    ensure_user_local_bin_on_path
+    test "$PATH" = "$HOME/.local/bin:/usr/bin:/bin"
+)
+
+(
+    HOME="$TEST_ROOT/path-home"
+    PATH="/usr/bin:$HOME/.local/bin:/bin"
+
+    ensure_user_local_bin_on_path
+    test "$PATH" = "/usr/bin:$HOME/.local/bin:/bin"
+)
 
 REMOTE="$TEST_ROOT/neo.git"
 OLD_SOURCE="$TEST_ROOT/old-source"
@@ -89,5 +109,90 @@ install_extension_sources \
 
 test "$(cat "$INSTALLED_NEO/extensions/extensions/neo/example/source")" = "neo"
 test "$(cat "$INSTALLED_NEO/extensions/extensions/mav/example/source")" = "mav"
+
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
+FAKE_ANSIBLE="$TEST_ROOT/ansible-playbook"
+CAPTURE_DIR="$TEST_ROOT/ansible-capture"
+mkdir -p "$CAPTURE_DIR"
+
+test -x "$SCRIPT_DIR/scripts/install-emacs"
+test -x "$SCRIPT_DIR/scripts/install-fonts"
+
+printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    'printf "%s\n" "$PWD" >"$CAPTURE_DIR/cwd"' \
+    'printf "%s\n" "${ANSIBLE_CONFIG:-}" >"$CAPTURE_DIR/config"' \
+    'printf "%s\n" "$@" >"$CAPTURE_DIR/args"' \
+    >"$FAKE_ANSIBLE"
+chmod +x "$FAKE_ANSIBLE"
+
+(
+    cd "$TEST_ROOT"
+    CAPTURE_DIR="$CAPTURE_DIR" ANSIBLE_PLAYBOOK_BIN="$FAKE_ANSIBLE" \
+        "$SCRIPT_DIR/scripts/install-emacs"
+)
+mapfile -t emacs_args <"$CAPTURE_DIR/args"
+test "$(cat "$CAPTURE_DIR/cwd")" = "$REPO_ROOT"
+test "$(cat "$CAPTURE_DIR/config")" = "$REPO_ROOT/ansible.cfg"
+test "${emacs_args[0]}" = \
+    "$REPO_ROOT/infra/ansible/playbooks/emacs/emacs.yaml"
+test "${emacs_args[1]}" = "-e"
+test "${emacs_args[2]}" = "emacs_version_name=master-gtk3"
+test "${emacs_args[3]}" = "--tags"
+test "${emacs_args[4]}" = "emacs"
+
+CAPTURE_DIR="$CAPTURE_DIR" ANSIBLE_PLAYBOOK_BIN="$FAKE_ANSIBLE" \
+    "$SCRIPT_DIR/scripts/install-emacs" 30.2
+mapfile -t emacs_args <"$CAPTURE_DIR/args"
+test "${emacs_args[2]}" = "emacs_version_name=30.2-gtk3"
+
+(
+    cd "$TEST_ROOT"
+    CAPTURE_DIR="$CAPTURE_DIR" ANSIBLE_PLAYBOOK_BIN="$FAKE_ANSIBLE" \
+        "$SCRIPT_DIR/scripts/install-fonts"
+)
+mapfile -t font_args <"$CAPTURE_DIR/args"
+test "$(cat "$CAPTURE_DIR/cwd")" = "$REPO_ROOT"
+test "$(cat "$CAPTURE_DIR/config")" = "$REPO_ROOT/ansible.cfg"
+test "${#font_args[@]}" = 1
+test "${font_args[0]}" = \
+    "$REPO_ROOT/infra/ansible/playbooks/fonts/fonts.yaml"
+
+STANDALONE_NEO="$TEST_ROOT/standalone-neo"
+mkdir -p \
+    "$STANDALONE_NEO/scripts" \
+    "$STANDALONE_NEO/ansible/roles" \
+    "$STANDALONE_NEO/ansible/playbooks/emacs" \
+    "$STANDALONE_NEO/ansible/playbooks/fonts"
+cp "$SCRIPT_DIR/scripts/install-emacs" "$STANDALONE_NEO/scripts/"
+cp "$SCRIPT_DIR/scripts/install-fonts" "$STANDALONE_NEO/scripts/"
+printf '%s\n' '[defaults]' 'roles_path = ./ansible/roles' \
+    >"$STANDALONE_NEO/ansible.cfg"
+
+(
+    cd "$TEST_ROOT"
+    CAPTURE_DIR="$CAPTURE_DIR" ANSIBLE_PLAYBOOK_BIN="$FAKE_ANSIBLE" \
+        "$STANDALONE_NEO/scripts/install-emacs"
+)
+mapfile -t emacs_args <"$CAPTURE_DIR/args"
+test "$(cat "$CAPTURE_DIR/cwd")" = "$STANDALONE_NEO"
+test "$(cat "$CAPTURE_DIR/config")" = "$STANDALONE_NEO/ansible.cfg"
+test "${emacs_args[0]}" = \
+    "$STANDALONE_NEO/ansible/playbooks/emacs/emacs.yaml"
+
+(
+    cd "$TEST_ROOT"
+    CAPTURE_DIR="$CAPTURE_DIR" ANSIBLE_PLAYBOOK_BIN="$FAKE_ANSIBLE" \
+        "$STANDALONE_NEO/scripts/install-fonts"
+)
+mapfile -t font_args <"$CAPTURE_DIR/args"
+test "$(cat "$CAPTURE_DIR/cwd")" = "$STANDALONE_NEO"
+test "$(cat "$CAPTURE_DIR/config")" = "$STANDALONE_NEO/ansible.cfg"
+test "${font_args[0]}" = \
+    "$STANDALONE_NEO/ansible/playbooks/fonts/fonts.yaml"
+
+grep -Fq '"$NEO_DIR/scripts/install-emacs" master' "$SCRIPT_DIR/setup.sh"
+grep -Fq '"$NEO_DIR/scripts/install-fonts"' "$SCRIPT_DIR/setup.sh"
 
 echo "setup.sh tests passed"

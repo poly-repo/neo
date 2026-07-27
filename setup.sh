@@ -3,6 +3,17 @@
 
 set -euo pipefail
 
+ensure_user_local_bin_on_path() {
+    local user_local_bin="$HOME/.local/bin"
+
+    case ":${PATH:-}:" in
+        *":$user_local_bin:"*) ;;
+        *) export PATH="$user_local_bin${PATH:+:$PATH}" ;;
+    esac
+}
+
+ensure_user_local_bin_on_path
+
 update_neo_checkout() {
     local target_dir="$1"
     local upstream="origin/main"
@@ -162,6 +173,7 @@ if emacs_needs_build; then
     echo "  - download and build a pinned tree-sitter runtime under ~/.cache/tree-sitter"
     echo "  - shallow-clone Emacs master and 'sudo make install' it into"
     echo "    ~/.local/emacs-master-<date>-gtk3"
+    echo "  - install the configured Google and Nerd Font families"
     echo ""
 
     set +e
@@ -169,7 +181,7 @@ if emacs_needs_build; then
     build_reply=$?
     set -e
 
-    manual_build_cmd="ANSIBLE_CONFIG=\"$NEO_DIR/ansible.cfg\" ansible-playbook \"$NEO_DIR/ansible/playbooks/emacs/emacs.yaml\" -e emacs_version_name=master-gtk3 --tags emacs"
+    manual_build_cmd="\"$NEO_DIR/scripts/install-emacs\" master && \"$NEO_DIR/scripts/install-fonts\""
 
     if [ "$build_reply" -eq 2 ]; then
         echo "Non-interactive shell (no /dev/tty); skipping the build offer."
@@ -189,9 +201,9 @@ if emacs_needs_build; then
             ANSIBLE_PLAYBOOK_BIN="$VENV_PATH/bin/ansible-playbook"
         fi
 
-        export ANSIBLE_CONFIG="$NEO_DIR/ansible.cfg"
-        "$ANSIBLE_PLAYBOOK_BIN" "$NEO_DIR/ansible/playbooks/emacs/emacs.yaml" \
-            -e emacs_version_name=master-gtk3 --tags emacs
+        export ANSIBLE_PLAYBOOK_BIN
+        "$NEO_DIR/scripts/install-emacs" master
+        "$NEO_DIR/scripts/install-fonts"
 
         set +e
         ask_yes_no "Install a daily cron job to keep this Emacs build fresh?"

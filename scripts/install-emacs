@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Install one GTK3 Emacs build through NEO's Ansible role.
+
+set -euo pipefail
+
+if (( $# > 1 )); then
+    echo "Usage: install-emacs [VERSION]" >&2
+    exit 2
+fi
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
+find_neo_root() {
+    local candidate
+    for candidate in "$script_dir/../../../.." "$script_dir/.."; do
+        candidate=$(cd -- "$candidate" 2>/dev/null && pwd) || continue
+        if [[ -f "$candidate/ansible.cfg" ]] &&
+           { [[ -d "$candidate/infra/ansible/roles" ]] ||
+             [[ -d "$candidate/ansible/roles" ]]; }; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+neo_root=$(find_neo_root) || {
+    echo "install-emacs: cannot find the NEO root or Ansible roles" >&2
+    exit 1
+}
+
+if [[ -d "$neo_root/infra/ansible" ]]; then
+    ansible_dir="$neo_root/infra/ansible"
+else
+    ansible_dir="$neo_root/ansible"
+fi
+
+if [[ -n "${ANSIBLE_PLAYBOOK_BIN:-}" ]]; then
+    ansible_playbook="$ANSIBLE_PLAYBOOK_BIN"
+elif command -v ansible-playbook >/dev/null 2>&1; then
+    ansible_playbook=$(command -v ansible-playbook)
+elif [[ -x "$neo_root/.neo-python/bin/ansible-playbook" ]]; then
+    ansible_playbook="$neo_root/.neo-python/bin/ansible-playbook"
+else
+    echo "install-emacs: ansible-playbook is not installed" >&2
+    exit 1
+fi
+
+version="${1:-master}"
+case "$version" in
+    *-gtk3) version_name="$version" ;;
+    *) version_name="$version-gtk3" ;;
+esac
+
+cd "$neo_root"
+export ANSIBLE_CONFIG="${ANSIBLE_CONFIG:-$neo_root/ansible.cfg}"
+exec "$ansible_playbook" \
+    "$ansible_dir/playbooks/emacs/emacs.yaml" \
+    -e "emacs_version_name=$version_name" \
+    --tags emacs

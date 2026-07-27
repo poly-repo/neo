@@ -29,18 +29,19 @@ isn't, you can download NEO.
 >   (e.g. `~/.cache/neo/tree-sitter/...`) — which requires a C compiler.
 > - If `setup.sh` doesn't find an `emacs` on your `PATH` newer than version
 >   32.0, it offers to build one from master for you via the `emacs-install`
->   Ansible role (scoped with `--tags emacs`, so the separate `fonts` role never
->   runs). Before doing anything it prints an itemized list of what accepting
->   will do, then asks for confirmation — nothing runs without an explicit "yes"
->   (and if `setup.sh` can't prompt you interactively, e.g. in CI, it prints the
->   equivalent command and skips instead of guessing). That role goes well
->   beyond `~/neo`: it lazily installs `ansible` into `~/neo/.neo-python` if
->   needed, `sudo apt install`s build dependencies via your system package
->   manager, builds and installs Emacs itself (under
->   `~/.local/emacs-master-<date>-gtk3`), and — only if you separately confirm a
+>   Ansible role and installs the configured font families through the separate
+>   `fonts` role. Before doing anything it prints an itemized list of what
+>   accepting will do, then asks for confirmation — nothing runs without an
+>   explicit "yes" (and if `setup.sh` can't prompt you interactively, e.g. in
+>   CI, it prints the equivalent commands and skips instead of guessing). This
+>   goes well beyond `~/neo`: it lazily installs `ansible` into
+>   `~/neo/.neo-python` if needed, `sudo apt install`s build dependencies via
+>   your system package manager, builds and installs Emacs itself (under
+>   `~/.local/emacs-master-<date>-gtk3`), installs Google and Nerd Font families
+>   into the user's font directory, and — only if you separately confirm a
 >   second prompt — installs a crontab entry to keep that build fresh daily.
->   Only opt into any of this if you're comfortable with an Ansible playbook
->   making system-level changes.
+>   Only opt into any of this if you're comfortable with Ansible making those
+>   changes.
 >
 > If any of this does something undisclosed here, feel free to haunt our commit
 > history forever.
@@ -54,6 +55,17 @@ After that you should be able to run:
 ```sh
 emacs --init-directory ~/neo
 ```
+
+The same Ansible operations are also available independently:
+
+```sh
+~/neo/scripts/install-emacs          # master-gtk3
+~/neo/scripts/install-emacs 30.2     # 30.2-gtk3
+~/neo/scripts/install-fonts
+```
+
+These wrappers locate the NEO root themselves, so they can be invoked from any
+working directory.
 
 You need Emacs 30.2 or newer. Why? I don't know, I'm not testing with anything
 older. `setup.sh`'s build offer kicks in below version 32.0, ahead of that 30.2
