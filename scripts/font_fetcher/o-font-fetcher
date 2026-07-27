@@ -6,7 +6,8 @@ import os
 import re
 import sys
 import requests
-import zipfile
+import tarfile
+import tempfile
 from urllib.parse import urlparse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -25,34 +26,64 @@ NERD_FONT_ASSET_ALIASES = {
 def nerd_release_asset_name(family):
     return NERD_FONT_ASSET_ALIASES.get(family, family)
 
+
+def nerd_release_archive_name(family):
+    return f'{nerd_release_asset_name(family)}.tar.xz'
+
+
+def download_to_file(url, out_path):
+    response = requests.get(
+        url,
+        allow_redirects=True,
+        stream=True,
+        timeout=(10, 300),
+    )
+    response.raise_for_status()
+    with open(out_path, 'wb') as output:
+        for chunk in response.iter_content(chunk_size=1024 * 64):
+            if chunk:
+                output.write(chunk)
+
+
+def extract_font_archive(archive_path, font_dir):
+    font_dir_path = Path(font_dir).resolve()
+    with tarfile.open(archive_path, 'r:xz') as archive:
+        for member in archive.getmembers():
+            if not member.isfile() or Path(member.name).suffix.lower() not in ('.ttf', '.otf'):
+                continue
+            destination = (font_dir_path / member.name).resolve()
+            try:
+                destination.relative_to(font_dir_path)
+            except ValueError as error:
+                raise ValueError(f'Unsafe path in font archive: {member.name}') from error
+            archive.extract(member, font_dir_path)
+
+
 def nerd_download_family(family, font_dir):
     print(f"[*] Fetching Nerd Font: {family}...")
-    base_url = 'https://github.com/ryanoasis/nerd-fonts/releases/latest'
+    archive_name = nerd_release_archive_name(family)
+    download_url = (
+        'https://github.com/ryanoasis/nerd-fonts/releases/latest/download/'
+        f'{archive_name}'
+    )
+    archive_path = None
     try:
-        head = requests.head(base_url, allow_redirects=True, timeout=10)
-        latest_version = head.url.rsplit('/', 1)[-1]
-
-        asset_name = nerd_release_asset_name(family)
-        download_url = f"https://github.com/ryanoasis/nerd-fonts/releases/download/{latest_version}/{asset_name}.zip"
-        r = requests.get(download_url, timeout=20)
-        
-        if r.status_code == 404:
-            print(f"  [!] ERROR: '{asset_name}.zip' not found. Check https://github.com/ryanoasis/nerd-fonts/releases")
-            return False
-
-        tmp_zip = f"/tmp/{asset_name}.zip"
-        with open(tmp_zip, 'wb') as f:
-            f.write(r.content)
-
-        with zipfile.ZipFile(tmp_zip, "r") as zip_ref:
-            [zip_ref.extract(f, font_dir) for f in zip_ref.namelist() 
-             if f.lower().endswith(('.ttf', '.otf'))]
-        
-        os.remove(tmp_zip)
+        with tempfile.NamedTemporaryFile(
+            prefix=f'{nerd_release_asset_name(family)}-',
+            suffix='.tar.xz',
+            delete=False,
+        ) as archive:
+            archive_path = archive.name
+        download_to_file(download_url, archive_path)
+        extract_font_archive(archive_path, font_dir)
         return True
-    except Exception as e:
-        print(f"  [!] ERROR: Failed to download {family}: {e}")
+    except Exception as error:
+        print(f"  [!] ERROR: Failed to download {family}: {error}")
         return False
+    finally:
+        if archive_path is not None:
+            Path(archive_path).unlink(missing_ok=True)
+
 
 def google_download_family(family, font_dir):
     print(f"[*] Fetching Google Font: {family}...")

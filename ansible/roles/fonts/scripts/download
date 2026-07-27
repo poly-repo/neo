@@ -29,7 +29,8 @@ import argparse
 import os
 import re
 import requests
-import zipfile
+import tarfile
+import tempfile
 from urllib.parse import urlparse
 from os.path import splitext
 from pathlib import Path
@@ -68,7 +69,12 @@ NERD_FONT_ASSET_ALIASES = {
 }
 
 def download_to_file(url, out_path):
-    response = requests.get(url, allow_redirects=True, stream=True)
+    response = requests.get(
+        url,
+        allow_redirects=True,
+        stream=True,
+        timeout=(10, 300),
+    )
     response.raise_for_status()
     with open(out_path, "wb") as f:
         for chunk in response.iter_content(chunk_size=1024 * 64):
@@ -81,19 +87,43 @@ def nerd_release_asset_name(family):
     return NERD_FONT_ASSET_ALIASES.get(family, family)
 
 
+def nerd_release_archive_name(family):
+    return f'{nerd_release_asset_name(family)}.tar.xz'
+
+
+def extract_font_archive(archive_path, font_dir):
+    font_dir_path = Path(font_dir).resolve()
+    with tarfile.open(archive_path, 'r:xz') as archive:
+        for member in archive.getmembers():
+            if not member.isfile() or Path(member.name).suffix.lower() not in ('.ttf', '.otf'):
+                continue
+            destination = (font_dir_path / member.name).resolve()
+            try:
+                destination.relative_to(font_dir_path)
+            except ValueError as error:
+                raise ValueError(f'Unsafe path in font archive: {member.name}') from error
+            archive.extract(member, font_dir_path)
+
+
 def nerd_download_family(family, font_dir):
-    base_url = 'https://github.com/ryanoasis/nerd-fonts/releases/latest'
-    response = requests.get(base_url)
-    latest_version = response.url.rsplit('/', 1)[-1]
-    asset_name = nerd_release_asset_name(family)
-    download_url = f"https://github.com/ryanoasis/nerd-fonts/releases/download/{latest_version}/{asset_name}.zip"
-    archive_path = f"/tmp/{asset_name}.zip"
-    download_to_file(download_url, archive_path)
-    print(archive_path)
-    zip_file = zipfile.ZipFile(archive_path, "r")
-    [zip_file.extract(file, font_dir) for file in zip_file.namelist() if file.endswith(('.ttf', '.otf'))]
-    zip_file.close()
-    
+    archive_name = nerd_release_archive_name(family)
+    download_url = (
+        'https://github.com/ryanoasis/nerd-fonts/releases/latest/download/'
+        f'{archive_name}'
+    )
+    with tempfile.NamedTemporaryFile(
+        prefix=f'{nerd_release_asset_name(family)}-',
+        suffix='.tar.xz',
+        delete=False,
+    ) as archive:
+        archive_path = archive.name
+    try:
+        download_to_file(download_url, archive_path)
+        print(archive_path)
+        extract_font_archive(archive_path, font_dir)
+    finally:
+        Path(archive_path).unlink(missing_ok=True)
+
 styles = {
     100: 'Thin',
     200: 'ExtraLight',
