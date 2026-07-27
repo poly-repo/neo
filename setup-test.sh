@@ -121,6 +121,7 @@ test -x "$SCRIPT_DIR/scripts/install-fonts"
 printf '%s\n' \
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
+    'printf "%s\n" "$0" >"$CAPTURE_DIR/runner"' \
     'printf "%s\n" "$PWD" >"$CAPTURE_DIR/cwd"' \
     'printf "%s\n" "${ANSIBLE_CONFIG:-}" >"$CAPTURE_DIR/config"' \
     'printf "%s\n" "$@" >"$CAPTURE_DIR/args"' \
@@ -155,7 +156,6 @@ test "${emacs_args[2]}" = "emacs_version_name=30.2-gtk3"
 mapfile -t font_args <"$CAPTURE_DIR/args"
 test "$(cat "$CAPTURE_DIR/cwd")" = "$REPO_ROOT"
 test "$(cat "$CAPTURE_DIR/config")" = "$REPO_ROOT/ansible.cfg"
-test "${#font_args[@]}" = 1
 test "${font_args[0]}" = \
     "$REPO_ROOT/infra/ansible/playbooks/fonts/fonts.yaml"
 
@@ -181,6 +181,10 @@ test "$(cat "$CAPTURE_DIR/config")" = "$STANDALONE_NEO/ansible.cfg"
 test "${emacs_args[0]}" = \
     "$STANDALONE_NEO/ansible/playbooks/emacs/emacs.yaml"
 
+mkdir -p "$STANDALONE_NEO/.neo-python/bin"
+touch "$STANDALONE_NEO/.neo-python/bin/python"
+chmod +x "$STANDALONE_NEO/.neo-python/bin/python"
+
 (
     cd "$TEST_ROOT"
     CAPTURE_DIR="$CAPTURE_DIR" ANSIBLE_PLAYBOOK_BIN="$FAKE_ANSIBLE" \
@@ -189,10 +193,36 @@ test "${emacs_args[0]}" = \
 mapfile -t font_args <"$CAPTURE_DIR/args"
 test "$(cat "$CAPTURE_DIR/cwd")" = "$STANDALONE_NEO"
 test "$(cat "$CAPTURE_DIR/config")" = "$STANDALONE_NEO/ansible.cfg"
+test "${#font_args[@]}" = 3
 test "${font_args[0]}" = \
     "$STANDALONE_NEO/ansible/playbooks/fonts/fonts.yaml"
+test "${font_args[1]}" = "-e"
+test "${font_args[2]}" = \
+    "font_downloader_python=$STANDALONE_NEO/.neo-python/bin/python"
+
+cp "$FAKE_ANSIBLE" \
+    "$STANDALONE_NEO/.neo-python/bin/ansible-playbook"
+PATH_ANSIBLE="$TEST_ROOT/path-ansible"
+mkdir -p "$PATH_ANSIBLE"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 99' \
+    >"$PATH_ANSIBLE/ansible-playbook"
+chmod +x "$PATH_ANSIBLE/ansible-playbook"
+
+CAPTURE_DIR="$CAPTURE_DIR" PATH="$PATH_ANSIBLE:/usr/bin:/bin" \
+    "$STANDALONE_NEO/scripts/install-fonts"
+test "$(cat "$CAPTURE_DIR/runner")" = \
+    "$STANDALONE_NEO/.neo-python/bin/ansible-playbook"
+
+CAPTURE_DIR="$CAPTURE_DIR" PATH="$PATH_ANSIBLE:/usr/bin:/bin" \
+    "$STANDALONE_NEO/scripts/install-emacs"
+test "$(cat "$CAPTURE_DIR/runner")" = \
+    "$STANDALONE_NEO/.neo-python/bin/ansible-playbook"
 
 grep -Fq '"$NEO_DIR/scripts/install-emacs" master' "$SCRIPT_DIR/setup.sh"
 grep -Fq '"$NEO_DIR/scripts/install-fonts"' "$SCRIPT_DIR/setup.sh"
+grep -Fq 'TARGET_DIR="$HOME/neo"' "$SCRIPT_DIR/setup.sh"
+grep -Fq '"$VENV_PATH/bin/pip" install -r "$REQ_FILE"' "$SCRIPT_DIR/setup.sh"
+grep -Fq 'ANSIBLE_PLAYBOOK_BIN="$VENV_PATH/bin/ansible-playbook"' \
+    "$SCRIPT_DIR/setup.sh"
 
 echo "setup.sh tests passed"

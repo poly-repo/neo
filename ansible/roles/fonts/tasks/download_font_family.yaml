@@ -25,4 +25,9 @@
       {{ role_path }}/scripts/download
       {{ item | quote }}
       {{ font_base_directory | quote }}
+    executable: >-
+      {{
+        font_downloader_python
+        | default(ansible_python_interpreter | default('/usr/bin/python3'))
+      }}
   when: not font_dir.stat.exists

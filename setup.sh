@@ -76,7 +76,7 @@ install_extension_sources() (
 
 cd "$HOME"
 
-TARGET_DIR="neo"
+TARGET_DIR="$HOME/neo"
 REPO_URL="https://github.com/poly-repo/neo.git"
 VENV_PATH="$TARGET_DIR/.neo-python"
 REQ_FILE="$TARGET_DIR/requirements.txt"
@@ -111,9 +111,6 @@ else
     echo "Warning: $REQ_FILE not found, skipping pip install."
 fi
 
-# Absolute path: the script cd'd to $HOME above and TARGET_DIR is relative,
-# but everything below (ansible invocations in particular) needs a path that
-# still works after further cd's.
 NEO_DIR="$(cd "$TARGET_DIR" && pwd)"
 
 # True if there's no usable Emacs on PATH: missing entirely, or version <=
@@ -188,18 +185,14 @@ if emacs_needs_build; then
         echo "Run this yourself later to build Emacs master:"
         echo "  $manual_build_cmd"
     elif [ "$build_reply" -eq 0 ]; then
-        # Prefer an ansible-playbook already on PATH; otherwise use (or
-        # install) one in the venv, without adding it to requirements.txt --
-        # it's only needed for this optional, opt-in build.
-        if command -v ansible-playbook >/dev/null 2>&1; then
-            ANSIBLE_PLAYBOOK_BIN="$(command -v ansible-playbook)"
-        elif [ -x "$VENV_PATH/bin/ansible-playbook" ]; then
-            ANSIBLE_PLAYBOOK_BIN="$VENV_PATH/bin/ansible-playbook"
-        else
+        # Keep NEO's optional Ansible tooling in its own environment. The
+        # helper scripts invoke it directly, so users do not need to activate
+        # the environment in their shell.
+        if [ ! -x "$VENV_PATH/bin/ansible-playbook" ]; then
             echo "Installing ansible into $VENV_PATH..."
             "$VENV_PATH/bin/pip" install ansible
-            ANSIBLE_PLAYBOOK_BIN="$VENV_PATH/bin/ansible-playbook"
         fi
+        ANSIBLE_PLAYBOOK_BIN="$VENV_PATH/bin/ansible-playbook"
 
         export ANSIBLE_PLAYBOOK_BIN
         "$NEO_DIR/scripts/install-emacs" master

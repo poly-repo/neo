@@ -37,10 +37,10 @@ fi
 
 if [[ -n "${ANSIBLE_PLAYBOOK_BIN:-}" ]]; then
     ansible_playbook="$ANSIBLE_PLAYBOOK_BIN"
-elif command -v ansible-playbook >/dev/null 2>&1; then
-    ansible_playbook=$(command -v ansible-playbook)
 elif [[ -x "$neo_root/.neo-python/bin/ansible-playbook" ]]; then
     ansible_playbook="$neo_root/.neo-python/bin/ansible-playbook"
+elif command -v ansible-playbook >/dev/null 2>&1; then
+    ansible_playbook=$(command -v ansible-playbook)
 else
     echo "install-emacs: ansible-playbook is not installed" >&2
     exit 1

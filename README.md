@@ -18,7 +18,10 @@ isn't, you can download NEO.
 >   `~/neo/extensions/extensions/mav`.
 > - Creates a Python virtual environment at `~/neo/.neo-python` and installs
 >   `~/neo/requirements.txt` into it (this may `sudo apt install python3-venv`
->   if that package isn't already present).
+>   if that package isn't already present). NEO helpers invoke this
+>   environment directly; setup does not activate it globally in your shell.
+>   It is separate from any general `~/.python` environment configured by VM
+>   provisioning.
 >
 > That's the extent of what `setup.sh` itself does. It does **not** stop there
 > for the lifetime of your NEO install, though:
