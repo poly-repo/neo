@@ -1,4 +1,5 @@
 basedpyright
+fonttools
 rassumfrassum
 requests
 ruff

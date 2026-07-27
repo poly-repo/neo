@@ -5,10 +5,10 @@
     family: "{{item|split(':')|first}}"
     source: "{{item|split(':')|last}}"
 
-- name: Check font
+- name: Check font installation
   ansible.builtin.stat:
-    path: "{{font_base_directory}}/{{source}}/{{family}}"
-  register: font_dir
+    path: "{{font_base_directory}}/{{source}}/{{family}}/.installed"
+  register: font_install_marker
 
 - name: Print font paths for debugging
   debug:
@@ -16,7 +16,7 @@
       - "font_base_directory: {{ font_base_directory }}"
       - "source: {{ source }}"
       - "family: {{ family }}"
-      - "font_dir.stat.exists: {{ font_dir.stat.exists }}"
+      - "font_install_marker.stat.exists: {{ font_install_marker.stat.exists }}"
       - "full path: {{ font_base_directory }}/{{ source }}/{{ family }}"
 
 - name: "Download {{family}} [from {{source}} fonts]"
@@ -30,4 +30,4 @@
         font_downloader_python
         | default(ansible_python_interpreter | default('/usr/bin/python3'))
       }}
-  when: not font_dir.stat.exists
+  when: not font_install_marker.stat.exists

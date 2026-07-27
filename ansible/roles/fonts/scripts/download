@@ -34,6 +34,7 @@ import tempfile
 from urllib.parse import urlparse
 from os.path import splitext
 from pathlib import Path
+from fontTools.ttLib import TTFont
 
 # Apple fonts
 # https://www.securitronlinux.com/debian-testing/install-mac-osx-fonts-on-linux-easily/
@@ -169,7 +170,6 @@ def rename_font_family(path, family, style):
     Monospace Casual"), which doesn't match the family name we requested
     (e.g. "Recursive Mono Casual"), so it wouldn't be found under that name.
     """
-    from fontTools.ttLib import TTFont
     font = TTFont(path)
     name_table = font['name']
     full_name = family if style == 'Regular' else f'{family} {style}'
@@ -222,6 +222,15 @@ def google_download_family(family, font_dir):
             variant_weight = None
             variant_url = None
 
+
+def installed_font_files(font_dir):
+    return [
+        path
+        for path in Path(font_dir).rglob('*')
+        if path.is_file() and path.suffix.lower() in ('.ttf', '.otf')
+    ]
+
+
 def main(family_and_source, base_dir):
     family, source = family_and_source.split(':')
 
@@ -233,8 +242,12 @@ def main(family_and_source, base_dir):
     elif source == 'nerd':
         nerd_download_family(family, font_dir)
     else:
-        print("Unknown source")
-    
+        raise ValueError(f'Unknown font source: {source}')
+
+    if not installed_font_files(font_dir):
+        raise RuntimeError(f'No font files were installed for {family}')
+    (Path(font_dir) / '.installed').touch()
+
 #    css=cssutils.parseUrl(url)
 #    print(css.cssText)
     
