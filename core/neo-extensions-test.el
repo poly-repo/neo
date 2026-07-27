@@ -25,6 +25,82 @@ Captured at top level (load time) rather than inside a test body,
 since `load-file-name' is only bound while this file is being loaded
 — by the time ERT runs an individual test, it is back to nil.")
 
+(ert-deftest neo/refresh-package-archives-skips-work-when-already-loaded ()
+  "Do not read disk or contact archives when metadata is already in memory."
+  (let ((package-archive-contents '((cached-package . cached-description)))
+        (cache-read-p nil)
+        (refresh-p nil))
+    (cl-letf (((symbol-function 'package-read-all-archive-contents)
+               (lambda () (setq cache-read-p t)))
+              ((symbol-function 'package-refresh-contents)
+               (lambda () (setq refresh-p t))))
+      (neo/refresh-package-archives))
+    (should-not cache-read-p)
+    (should-not refresh-p)))
+
+(ert-deftest neo/refresh-package-archives-prefers-disk-cache ()
+  "Use cached metadata without contacting public package archives."
+  (let* ((neo/cache-directory (make-temp-file "neo-package-cache-" t))
+         (expected-package-dir
+          (expand-file-name "elpa-packages" neo/cache-directory))
+         (package-archive-contents nil)
+         (observed-package-dir nil)
+         (refresh-p nil))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'package-read-all-archive-contents)
+                     (lambda ()
+                       (setq observed-package-dir package-user-dir
+                             package-archive-contents
+                             '((cached-package . cached-description)))))
+                    ((symbol-function 'package-refresh-contents)
+                     (lambda () (setq refresh-p t))))
+            (neo/refresh-package-archives))
+          (should (equal observed-package-dir expected-package-dir))
+          (should-not refresh-p))
+      (delete-directory neo/cache-directory t))))
+
+(ert-deftest neo/refresh-package-archives-refreshes-first-use-noninteractively ()
+  "Refresh an empty cache noninteractively under Neo's package directory."
+  (let* ((neo/cache-directory (make-temp-file "neo-package-cache-" t))
+         (expected-package-dir
+          (expand-file-name "elpa-packages" neo/cache-directory))
+         (package-archive-contents nil)
+         (observed-package-dir nil)
+         (observed-noninteractive nil))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'package-read-all-archive-contents)
+                     #'ignore)
+                    ((symbol-function 'package-refresh-contents)
+                     (lambda ()
+                       (setq observed-package-dir package-user-dir
+                             observed-noninteractive
+                             url-request-noninteractive
+                             package-archive-contents
+                             '((downloaded-package . downloaded-description))))))
+            (neo/refresh-package-archives))
+          (should (equal observed-package-dir expected-package-dir))
+          (should observed-noninteractive))
+      (delete-directory neo/cache-directory t))))
+
+(ert-deftest neo/refresh-package-archives-degrades-after-refresh-failure ()
+  "Leave metadata empty and log a warning when first-use refresh fails."
+  (let ((package-archive-contents nil)
+        (warning-message nil))
+    (cl-letf (((symbol-function 'package-read-all-archive-contents)
+               #'ignore)
+              ((symbol-function 'package-refresh-contents)
+               (lambda () (error "network unavailable")))
+              ((symbol-function 'neo/log-warn)
+               (lambda (category format-string &rest args)
+                 (setq warning-message
+                       (cons category (apply #'format format-string args))))))
+      (neo/refresh-package-archives))
+    (should-not package-archive-contents)
+    (should (equal warning-message
+                   '(core . "Could not refresh package archives: network unavailable")))))
+
 (ert-deftest neo/use-local-extension-sources-p-requires-named-instance ()
   "Only non-default checkout instances should use local extension sources."
   (let ((user-emacs-directory (make-temp-file "neo-user-emacs-" t)))

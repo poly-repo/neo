@@ -3,6 +3,7 @@
 (require 'cl-lib)
 (require 'cl-generic)
 (require 'json)
+(require 'package)
 (require 'subr-x)
 (require 'url)
 (require 'url-http)
@@ -644,10 +645,28 @@ The original `neo/use-package' is restored afterwards."
 
 
 (defun neo/refresh-package-archives ()
+  "Populate package archive metadata without prompting during startup.
+
+Prefer metadata already loaded in memory, then cached metadata under
+Neo's package directory.  Only contact the configured public archives
+when neither source has usable metadata.  A failed refresh leaves
+`package-archive-contents' empty so callers can degrade to package names
+without descriptions."
   (unless (and (boundp 'package-archive-contents)
                package-archive-contents)
     (let ((package-user-dir (neo/cache-file-path "elpa-packages")))
-      (package-refresh-contents))))
+      (condition-case err
+          (package-read-all-archive-contents)
+        (error
+         (neo/log-warn 'core "Could not read cached package archives: %s"
+                       (error-message-string err))))
+      (unless package-archive-contents
+        (condition-case err
+            (let ((url-request-noninteractive t))
+              (package-refresh-contents))
+          (error
+           (neo/log-warn 'core "Could not refresh package archives: %s"
+                         (error-message-string err))))))))
 
 (defun neo/find-package-desc (pkg-name)
   "Return the `package-desc` object for PKG-NAME, or nil if not found."
