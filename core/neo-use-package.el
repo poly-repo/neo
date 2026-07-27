@@ -61,6 +61,117 @@ not merely whether it is already installed or available on `load-path'."
                           (file-truename lisp-directory))))
           (file-in-directory-p library lisp-root)))))
 
+(defun neo--system-package-token-string (token)
+  "Return TOKEN as a command or package-name string."
+  (cond
+   ((stringp token) token)
+   ((symbolp token) (symbol-name token))
+   (t
+    (signal 'wrong-type-argument
+            (list '(or symbol string) token)))))
+
+(defun neo--normalize-system-package-requirements (forms)
+  "Validate and return system-package requirements from FORMS.
+
+FORMS must contain one list of `(CHECK . PACKAGE)' pairs.  CHECK is an
+executable name or a command list whose zero exit status means the
+requirement is satisfied.  PACKAGE is the Debian or Ubuntu package to
+install when CHECK fails."
+  (unless (= (length forms) 1)
+    (error "neo/use-package: :ensure-system-package expects one list of requirements"))
+  (let ((requirements (car forms)))
+    (unless (listp requirements)
+      (error "neo/use-package: :ensure-system-package requires a list"))
+    (dolist (requirement requirements)
+      (unless (and (consp requirement)
+                   (or (symbolp (cdr requirement))
+                       (stringp (cdr requirement))))
+        (error "neo/use-package: invalid system-package requirement %S" requirement))
+      (let ((check (car requirement)))
+        (unless (or (symbolp check)
+                    (stringp check)
+                    (and (consp check)
+                         (cl-every (lambda (token)
+                                     (or (symbolp token) (stringp token)))
+                                   check)))
+          (error "neo/use-package: invalid system-package check %S" check))))
+    requirements))
+
+(defun neo--extract-system-package-requirements (args)
+  "Return `(REQUIREMENTS . USE-PACKAGE-ARGS)' extracted from ARGS."
+  (let* ((args-alist (neo--sectioned-list->alist args))
+         (entry (assoc :ensure-system-package args-alist)))
+    (if entry
+        (cons (neo--normalize-system-package-requirements (cdr entry))
+              (neo--alist->sectioned-list
+               (neo--alist-remove-key :ensure-system-package args-alist)))
+      (cons nil args))))
+
+(defun neo--system-package-check-command (check)
+  "Return the command list represented by CHECK."
+  (if (consp check)
+      (mapcar #'neo--system-package-token-string check)
+    (list (neo--system-package-token-string check))))
+
+(defun neo--system-package-requirement-satisfied-p (check)
+  "Return non-nil when system-package CHECK succeeds."
+  (let* ((command (neo--system-package-check-command check))
+         (program (car command))
+         (arguments (cdr command))
+         (executable (executable-find program)))
+    (if arguments
+        (and executable
+             (equal (apply #'process-file executable nil nil nil arguments) 0))
+      executable)))
+
+(defun neo--system-package-install-command (package)
+  "Return a synchronous Debian or Ubuntu install command for PACKAGE."
+  (let ((apt-get (and (eq system-type 'gnu/linux)
+                      (executable-find "apt-get")))
+        (package (neo--system-package-token-string package)))
+    (unless apt-get
+      (error "NEO cannot install system package %s on %s; install it manually"
+             package system-type))
+    (if (zerop (user-uid))
+        (list apt-get "install" "-y" package)
+      (let ((sudo (executable-find "sudo")))
+        (unless sudo
+          (error "NEO cannot install system package %s because sudo is unavailable"
+                 package))
+        (list sudo "--non-interactive" apt-get "install" "-y" package)))))
+
+(defun neo--install-system-package (package)
+  "Install PACKAGE synchronously without displaying a process buffer."
+  (let* ((command (neo--system-package-install-command package))
+         (program (car command))
+         (arguments (cdr command))
+         (buffer (generate-new-buffer " *neo system package install*")))
+    (unwind-protect
+        (let ((status (apply #'process-file program nil buffer nil arguments)))
+          (unless (and (integerp status) (zerop status))
+            (error "Failed to install system package %s with %S: %s"
+                   (neo--system-package-token-string package)
+                   command
+                   (with-current-buffer buffer (buffer-string)))))
+      (kill-buffer buffer))))
+
+(defun neo/ensure-system-packages (requirements)
+  "Synchronously satisfy declarative system-package REQUIREMENTS.
+
+Each entry is a `(CHECK . PACKAGE)' pair accepted by
+`neo--normalize-system-package-requirements'.  A missing requirement is
+installed before this function returns; installation or verification
+failure stops package replay with a clear error."
+  (dolist (requirement requirements)
+    (let ((check (car requirement))
+          (package (cdr requirement)))
+      (unless (neo--system-package-requirement-satisfied-p check)
+        (neo--install-system-package package)
+        (unless (neo--system-package-requirement-satisfied-p check)
+          (error "System package %s installed, but prerequisite %S is still unavailable"
+                 (neo--system-package-token-string package)
+                 check))))))
+
 (defconst neo--use-package-list-sections
   '(:config :init :hook :bind :bind* :custom-face :mode :interpreter
     :commands :defines :functions :requires :after :defer :demand)
@@ -591,13 +702,21 @@ Pure -- no eval, no side effects."
 (defmacro neo/use-package (name &rest args)
   "Augment `use-package` with Neo-specific tracking and filtering.
 
+`:ensure-system-package' accepts one list of `(CHECK . PACKAGE)' pairs.
+Neo satisfies these requirements synchronously before the declaration
+can queue NAME for installation, without displaying a process buffer.
+
 When `neo/use-extensions' is non-nil, store the raw `use-package' form in
 `neo--enabled-packages' indexed by (user . extension-base-name); framework
 replay later queues all stored packages together.  Otherwise execute the
 form immediately and wait for it, preserving the synchronous development
 path."
   (declare (indent defun))
-  (let* ((args (neo--normalize-use-package-arguments args))
+  (let* ((system-package-result
+          (neo--extract-system-package-requirements args))
+         (system-package-requirements (car system-package-result))
+         (args (neo--normalize-use-package-arguments
+                (cdr system-package-result)))
          (args (if (memq :ensure args)
                    args
                  (append args (if (neo/builtin-feature-p name)
@@ -610,9 +729,16 @@ path."
 		      (file-name-directory file))))
          (key (cons user extension))
          (real-form `(use-package ,name ,@args)))
-    (if neo/use-extensions
-	`(setq neo--enabled-packages (neo--alist-push ',key ',real-form neo--enabled-packages))
-      `(prog1 (eval ',real-form)
-         (elpaca-wait)))))
+    (let ((body
+           (if neo/use-extensions
+               `(setq neo--enabled-packages
+                      (neo--alist-push ',key ',real-form neo--enabled-packages))
+             `(prog1 (eval ',real-form)
+                (elpaca-wait)))))
+      (if system-package-requirements
+          `(progn
+             (neo/ensure-system-packages ',system-package-requirements)
+             ,body)
+        body))))
 
 (provide 'neo-use-package)

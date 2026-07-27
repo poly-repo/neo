@@ -140,6 +140,105 @@
       (should (string-match-p ":ensure nil" expansion))
       (should-not (string-match-p ":builtin" expansion)))))
 
+(ert-deftest neo/use-package-ensures-system-packages-before-queueing ()
+  "Run system prerequisites before storing the replayable declaration."
+  (let ((load-file-name neo-use-package-test--file))
+    (let ((expansion
+           (macroexpand-1
+            '(neo/use-package native-package
+               :ensure-system-package
+               ((pkgconf . pkgconf)
+                (("pkgconf" "--exists" "native-library") . native-library-dev))
+               :config
+               (native-package-mode 1)))))
+      (should (eq (car expansion) 'progn))
+      (should (eq (car (cadr expansion)) 'neo/ensure-system-packages))
+      (should (eq (car (caddr expansion)) 'setq))
+      (should-not (memq :ensure-system-package
+                        (flatten-tree (caddr expansion)))))))
+
+(ert-deftest neo/ensure-system-packages-does-nothing-when-satisfied ()
+  "Do not invoke the installer for requirements already present."
+  (let (installed)
+    (cl-letf (((symbol-function 'neo--system-package-requirement-satisfied-p)
+               (lambda (_check) t))
+              ((symbol-function 'neo--install-system-package)
+               (lambda (package) (push package installed))))
+      (neo/ensure-system-packages '((pkgconf . pkgconf))))
+    (should-not installed)))
+
+(ert-deftest neo/ensure-system-packages-installs-before-rechecking ()
+  "Install a missing requirement synchronously, then verify it again."
+  (let ((check-count 0)
+        events)
+    (cl-letf (((symbol-function 'neo--system-package-requirement-satisfied-p)
+               (lambda (_check)
+                 (push 'check events)
+                 (> (cl-incf check-count) 1)))
+              ((symbol-function 'neo--install-system-package)
+               (lambda (_package) (push 'install events))))
+      (neo/ensure-system-packages '((native-tool . native-tool-package))))
+    (should (equal (nreverse events) '(check install check)))))
+
+(ert-deftest neo/system-package-command-check-runs-synchronously ()
+  "Use a direct process call for command-based prerequisite checks."
+  (let (invocation)
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (command)
+                 (and (string= command "pkgconf") "/usr/bin/pkgconf")))
+              ((symbol-function 'process-file)
+               (lambda (program infile destination display &rest arguments)
+                 (setq invocation
+                       (list program infile destination display arguments))
+                 0)))
+      (should
+       (neo--system-package-requirement-satisfied-p
+        '("pkgconf" "--exists" "enchant-2"))))
+    (should
+     (equal invocation
+            '("/usr/bin/pkgconf" nil nil nil ("--exists" "enchant-2"))))))
+
+(ert-deftest neo/system-package-install-command-uses-apt-synchronously ()
+  "Construct the Debian or Ubuntu installer without a shell command."
+  (let ((system-type 'gnu/linux))
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (command)
+                 (pcase command
+                   ("apt-get" "/usr/bin/apt-get")
+                   ("sudo" "/usr/bin/sudo"))))
+              ((symbol-function 'user-uid) (lambda () 1000)))
+      (should
+       (equal
+        (neo--system-package-install-command 'libenchant-2-dev)
+        '("/usr/bin/sudo" "--non-interactive" "/usr/bin/apt-get"
+          "install" "-y" "libenchant-2-dev"))))))
+
+(ert-deftest neo/system-package-install-command-rejects-unsupported-systems ()
+  "Fail clearly rather than guessing a package manager."
+  (let ((system-type 'darwin))
+    (cl-letf (((symbol-function 'executable-find) (lambda (_command) nil)))
+      (should-error
+       (neo--system-package-install-command 'libenchant-2-dev)
+       :type 'error))))
+
+(ert-deftest neo/install-system-package-reports-command-failure ()
+  "Surface synchronous installer output without opening its buffer."
+  (cl-letf (((symbol-function 'neo--system-package-install-command)
+             (lambda (_package)
+               '("/usr/bin/sudo" "/usr/bin/apt-get"
+                 "install" "-y" "native-library-dev")))
+            ((symbol-function 'process-file)
+             (lambda (_program _infile destination _display &rest _args)
+               (with-current-buffer destination
+                 (insert "permission denied"))
+               1)))
+    (let ((failure
+           (should-error
+            (neo--install-system-package 'native-library-dev)
+            :type 'error)))
+      (should (string-match-p "permission denied"
+                              (error-message-string failure))))))
+
 (ert-deftest neo/prepare-use-package-form-disables-duplicate-installs ()
   "Avoid re-queueing duplicate package installs during replay."
   (let ((seen (make-hash-table :test 'equal)))

@@ -4,25 +4,7 @@
 (require 'neo-elpaca)
 (require 'neo-use-package)
 
-;; TODO: resolve the mess w/ :ensure-system-packages
 ;; TODO: elisp autocompletion on :custom should be for variables, not functions)
-
-;;; ensure-system-package uses an async buffer (in a side window) which in turns
-;;; causes the dashboard to be locked in there, a small window at the bottom of the
-;;; frame that cannot even been grown.
-;;; TODO: fix the mess for real
-;;; for now, I just disable this, as I have everything installed.
-(defcustom neo/ignore-ensure-system-package t
-  "If non-nil, disables the use of `ensure-system-package` in `neo/use-package`.
-
-This is useful when system dependencies are already satisfied or managed externally.
-But it was introduced because elpaca had a problem with it:
-  ensure-system-package uses an async buffer (in a side window) which in turns
-  causes the dashboard to be locked in there, a small window at the bottom of the
-  frame that cannot even been grown.
-"
-  :type 'boolean
-  :group 'neo-packages)
 
 ;(defvar neo--installed-packages nil) ; TODO is this used
 
