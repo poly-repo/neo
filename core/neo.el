@@ -22,6 +22,7 @@
 (neo--require 'neo-utils)
 (neo--require 'neo-window)
 (neo--require 'neo-custom)			; customization groups
+(neo--require 'neo-location)			; IP-derived location settings
 (neo--require 'neo-config)			; configuration db
 (neo--require 'neo-application)			; needed in neo-packages
 (neo--require 'neo-packages)			; package management
@@ -32,6 +33,8 @@
 (neo--require 'neo-fonts)
 
 (require 'server)
+
+(neo/initialize-location)
 
 ;; Derive the server name from the instance name (`--name`/`-name`/
 ;; `EMACS_NAME`, see `neo/get-emacs-instance-name') instead of Emacs's
