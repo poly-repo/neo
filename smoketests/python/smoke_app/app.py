@@ -1,5 +1,6 @@
 """Entry point containing intentional static type errors."""
 
+from sys import displayhook
 from smoke_app.formatting import activity_label, display_name
 from smoke_app.models import default_user
 
