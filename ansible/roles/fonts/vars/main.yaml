@@ -2,6 +2,7 @@ font_base_directory: "{{ home_dir }}/.fonts"
 
 font_families:
   - Iosevka:nerd
+  - Faster One:google
   - Patrick Hand:google
   - Recursive:google
   - Recursive Mono Casual:google
