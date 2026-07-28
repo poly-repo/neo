@@ -1,0 +1,33 @@
+cabal-version: 3.0
+name: neo-haskell-smoke
+version: 0.1.0.0
+build-type: Simple
+synopsis: Intentionally diagnostic Haskell project for NEO smoke tests
+description:
+  A small multi-module project containing deliberate GHC and HLint findings.
+category: Development
+license: BSD-3-Clause
+maintainer: devnull@example.test
+
+common warnings
+  ghc-options:
+    -Wall
+    -Wcompat
+
+library
+  import: warnings
+  exposed-modules:
+    Smoke.Greeting
+    Smoke.User
+  hs-source-dirs: src
+  build-depends: base >=4.18 && <5
+  default-language: GHC2021
+
+executable neo-haskell-smoke
+  import: warnings
+  main-is: Main.hs
+  hs-source-dirs: app
+  build-depends:
+    base >=4.18 && <5,
+    neo-haskell-smoke
+  default-language: GHC2021

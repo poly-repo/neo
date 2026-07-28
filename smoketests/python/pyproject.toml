@@ -1,0 +1,17 @@
+[project]
+name = "neo-python-smoke"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.basedpyright]
+typeCheckingMode = "strict"
+
+[tool.pyright]
+typeCheckingMode = "strict"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "SIM"]

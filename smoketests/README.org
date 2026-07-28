@@ -1,0 +1,42 @@
+#+title: NEO editor smoke tests
+
+These projects are intentionally small and intentionally broken.  Open each
+listed entry point as a project in NEO to exercise major modes, project
+discovery, cross-file navigation, language servers, formatters, and linters.
+
+Do not fix the marked diagnostics: their presence is the test.
+
+| Fixture | Open first | Expected tools |
+|---------+------------+----------------|
+| Go | =go/main.go= | gopls, gofmt, go vet, staticcheck |
+| Haskell | =haskell/app/Main.hs= | HLS, GHC, HLint, fourmolu/ormolu |
+| Python | =python/smoke_app/app.py= | basedpyright/pyright, Ruff, Black |
+| Org | =org/normal/index.org= | Org links, agenda, Babel, spell checking |
+| Org-Haskell | =org/orghs/notebook.orghs= | NEO notebook mode, Babel, GHCi |
+
+The language projects contain both compiler or type-checker errors and lint
+violations.  The expected findings below make the failures deliberate without
+disabling diagnostics.
+
+* Go
+
+- =main.go=: passes a =User= where =Greeting= requires a =string=.
+- =report.go=: uses the wrong =fmt.Printf= verb for a string.
+- =greeter.go=: leaves =legacyGreeting= unused for staticcheck U1000.
+
+* Haskell
+
+- =Smoke/User.hs=: assigns a =String= to the =Int= =userAge= field.
+- =Smoke/Greeting.hs=: has an unused import and two HLint suggestions.
+
+* Python
+
+- =app.py=: passes =str= where =User= is required and accesses =user.emali=.
+- =formatting.py=: has an unused import and compares a boolean with =True=.
+- =models.py=: uses a mutable default argument.
+
+* Org
+
+The Org fixtures are valid rather than deliberately broken.  They exercise
+cross-file links, TODO states, tables, Babel font locking, and NEO's =.orghs=
+notebook workflow.

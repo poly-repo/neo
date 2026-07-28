@@ -1,6 +1,6 @@
 basedpyright
 fonttools
-rassumfrassum
+rassumfrassum==0.3.4
 requests
 ruff
 ty

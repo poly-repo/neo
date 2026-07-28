@@ -1,0 +1,46 @@
+#+title: NEO Org-Haskell notebook smoke test
+#+property: header-args:haskell :tangle no
+
+* Model
+
+The blocks form one small program.  Loading or evaluating the final block
+should make the preceding definitions available through NEO's notebook mode.
+
+#+begin_src haskell
+{-# LANGUAGE DerivingStrategies #-}
+
+data Reading = Reading
+  { sensor :: String
+  , celsius :: Double
+  }
+  deriving stock (Eq, Show)
+#+end_src
+
+* Transformation
+
+#+begin_src haskell
+toFahrenheit :: Reading -> Double
+toFahrenheit reading = celsius reading * 9 / 5 + 32
+
+renderReading :: Reading -> String
+renderReading reading =
+  sensor reading ++ ": " ++ show (toFahrenheit reading) ++ "F"
+#+end_src
+
+* Interactive entry point
+
+Place point in this block and use the NEO notebook evaluation command.
+
+#+begin_src haskell :results output
+main :: IO ()
+main =
+  mapM_
+    (putStrLn . renderReading)
+    [ Reading "desk" 21.5
+    , Reading "window" 18.0
+    ]
+#+end_src
+
+* Related ordinary Org fixture
+
+See [[file:../normal/index.org][the normal Org project]].

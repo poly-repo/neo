@@ -1,0 +1,14 @@
+#+title: NEO Org smoke-test tasks
+#+startup: showall
+
+* TODO Exercise agenda navigation
+  SCHEDULED: <2026-07-28 Tue>
+
+* NEXT Follow the link back to the overview
+
+Return to [[file:index.org][the smoke-test overview]].
+
+* DONE Exercise a property drawer
+  :PROPERTIES:
+  :OWNER:    NEO
+  :END:

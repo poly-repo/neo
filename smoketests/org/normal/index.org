@@ -1,0 +1,27 @@
+#+title: NEO Org smoke test
+#+author: NEO
+#+startup: overview
+
+* Purpose
+
+This ordinary Org project exercises headings, links, TODO keywords, tables,
+source blocks, and navigation across files.
+
+* Project links
+
+- [[file:tasks.org][Open the project task list]]
+- [[file:../orghs/notebook.orghs][Open the Org-Haskell notebook fixture]]
+
+* Status table
+
+| Component | State |
+|-----------+-------|
+| Org mode  | ready |
+| Babel     | ready |
+| Links     | ready |
+
+* Babel
+
+#+begin_src emacs-lisp :results value
+(mapcar #'upcase '("neo" "org" "smoke"))
+#+end_src
